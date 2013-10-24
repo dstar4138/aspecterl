@@ -1,0 +1,3 @@
+-compile({parse_transform,aspect}).
+-include_lib("AspectErl/include/pointcuts.hrl").
+-include_lib("AspectErl/include/advice.hrl").
