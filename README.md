@@ -1,0 +1,4 @@
+AspectErl
+=========
+
+AspectJ meets Erlang.
