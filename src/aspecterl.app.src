@@ -1,4 +1,4 @@
-{application, 'AspectErl',
+{application, aspecterl,
  [
   {description, "Aspect Oriented Programming toolkit for Erlang."},
   {vsn, "0.0.1"},

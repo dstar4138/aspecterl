@@ -9,6 +9,6 @@
 % The Compile-time hook function. See include/aspect.hrl for more information.
 -export([parse_transform/2]).
 
-
-
-parse_transform( AST, Options ) -> AST.
+parse_transform( AST, _Options ) -> 
+    io:fwrite("AST = ~p\n",[AST]),
+    AST.

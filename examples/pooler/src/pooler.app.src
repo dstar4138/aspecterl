@@ -1,0 +1,6 @@
+{application, pooler,
+ [
+  {description, "AspectErl pooler example"},
+  {vsn, "0.0.1"},
+  {applications, [kernel, stdlib]}
+ ]}.
