@@ -7,11 +7,11 @@
 
 % Pointcut to B Servers.
 -pointcut({bservers, [{behaviour,"gen_server"},
-                      {module,"\\w*_b"}]).
+                      {module,"\\w*_b"}]}).
 
 -advice([{pointcut,[bservers]},
          {type,'around'},
-         {args, [{default_pool,"BServers"}]}]).
+         {args, [{default_pool,'bServers'}]}]).
 pool( AroundCall={Module, Func, _Args}, PassedToPool ) ->
     Pool = getPoolName( PassedToPool ),
     io:fwrite("Adding ~p to pool: ~p\n",[Module,Pool]),
