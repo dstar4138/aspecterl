@@ -1,5 +1,5 @@
 -compile({parse_transform,aspect}).
--include_lib("aspecterl/include/pointcuts.hrl").
+-include_lib("aspecterl/include/pointcut.hrl").
 -include_lib("aspecterl/include/advice.hrl").
 -include_lib("aspecterl/include/decorate.hrl").
 

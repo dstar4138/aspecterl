@@ -1,7 +1,7 @@
 %% This module advises an example application where we want all gen_servers
 %% who have to do with thing '_b' and not '_a' to join a the Pool "BServers".
 -module(pool_advice).
--include_lib("AspectErl/include/aspect.hrl").
+-include_lib("aspecterl/include/aspect.hrl").
 
 -export([pool/2]).
 
@@ -11,7 +11,7 @@
 
 -advice([{pointcut,[bservers]},
          {type,'around'},
-         {args, [{default_pool,"BServers"}]}).
+         {args, [{default_pool,"BServers"}]}]).
 pool( AroundCall={Module, Func, _Args}, PassedToPool ) ->
     Pool = getPoolName( PassedToPool ),
     io:fwrite("Adding ~p to pool: ~p\n",[Module,Pool]),

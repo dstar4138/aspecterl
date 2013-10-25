@@ -11,7 +11,7 @@
         %% The following are internal use only:
         name :: atom(),        % The name of the advice function.
         module :: atom(),      % Module the advice function appears in.
-        args :: [term()],      % Parameters to pass to function.
+        args :: [term()]      % Parameters to pass to function.
 }).        
 %% Advice function spec:
 %%  fun_name( FuncCall, Args )
@@ -28,5 +28,5 @@
 %%      Additionally, if its a after_return, Args will contain a {result, R}
 %%      where R is the return value of the function call you are advising.
 
-%TODO: Do I need to mask the applying function or self()?
--define(proceed({Module,Func,Args}), erlang:apply(Module,Func,Args)).
+%% Proceed function call within an Around Advice.
+-define(proceed(FuncCall), aspecterl:proceed(FuncCall)).
