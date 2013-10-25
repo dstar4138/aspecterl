@@ -6,6 +6,8 @@ compile: deps
 clean:
 	$(REBAR) clean
 
+aspects_off: deps
+	$(REBAR) update-deps compile -DAspectsOn=false
 
 deps:
 	$(REBAR) get-deps
