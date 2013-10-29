@@ -11,3 +11,8 @@ aspects_off: deps
 
 deps:
 	$(REBAR) get-deps
+
+distclean: clean
+	$(REBAR) delete-deps
+	-rmdir deps
+	-rmdir ebin
