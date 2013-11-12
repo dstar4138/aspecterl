@@ -7,7 +7,8 @@
 %%
 %%  @author Alexander Dean
 -module(erladf).
--include("aspect.hrl"). % For all record definitions.
+-include("advice.hrl"). % For all record definitions.
+-include("pointcut.hrl").
 
 -export([is_advice_dir/1, 
          parse/1, parse_all/1]).
@@ -18,7 +19,7 @@
 
 %%% Bindings to turn ADF files into our Pointcut/Advice record structures.
 -define( DEFAULT_BINDINGS, [
-    {'Aspect', fun( Adv, Pc ) -> #aerl_aspect{ advice=Adv, pointcuts=Pc } end},
+    {'Aspect', fun( Adv, Pc ) -> #aspect{ advice=Adv, pointcuts=Pc } end},
     {'Advice', fun( Type, Module, Fun ) ->
                        #advice{ type=Type, module=Module ,name=Fun, args=[] }
                end},
@@ -89,9 +90,9 @@ get_adf_files( [H|R] , A ) ->
 %%  The internal Advice record is more powerful and can link to the pointcut
 %%  table.
 %% @end
-unwrap( Globals ) -> unwrap( unwrap, {[], []} ).
+unwrap( Globals ) -> unwrap( Globals, {[], []} ).
 unwrap( [], A ) -> A;
-unwrap( [#aspect{ advice=A, pointcut=P }|R], {Adv, Pcs} ) ->
+unwrap( [#aspect{ advice=A, pointcuts=P }|R], {Adv, Pcs} ) ->
     Name = gen_global_name(P), 
     PNamed = P#pointcut{name=Name},
     ALinked = A#advice{pointcuts=[Name|A#advice.pointcuts]},

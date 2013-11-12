@@ -6,7 +6,7 @@
               | 'after_return' % After the return statement
               | 'after_final'  % After function completes, result is not passed
               | 'around',      % Around the function call, call ?proceed/1 to continue.
-        pointcuts :: [atom() | {global, integer()]],  % List of pointcuts that if match insert the advice.
+        pointcuts :: [atom() | {global, integer()}],  % List of pointcuts that if match insert the advice.
 
         %% The following are internal use only:
         name :: atom(),        % The name of the advice function.
