@@ -92,7 +92,7 @@ get_adf_files( [H|R] , A ) ->
 unwrap( Globals ) -> unwrap( unwrap, {[], []} ).
 unwrap( [], A ) -> A;
 unwrap( [#aspect{ advice=A, pointcut=P }|R], {Adv, Pcs} ) ->
-    Name = gen_global_name(P) 
+    Name = gen_global_name(P), 
     PNamed = P#pointcut{name=Name},
     ALinked = A#advice{pointcuts=[Name|A#advice.pointcuts]},
     unwrap( R, { [ALinked|Adv], [PNamed|Pcs] } ).
