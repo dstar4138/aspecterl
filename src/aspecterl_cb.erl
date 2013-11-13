@@ -4,10 +4,11 @@
 %% runtime and injected during compile time or at the discression of the 
 %% programmer (either through AspectErl Macros or explicit calls).
 %%
--module(aspecterl).
+-module(aspecterl_cb).
 
-%% AspectErl Callbacks
+%% AspectErl Callbacks.
 -export([proceed/1]).
+
 
 
 %% ===========================================================================

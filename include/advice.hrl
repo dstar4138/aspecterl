@@ -28,5 +28,4 @@
 %%      Additionally, if its a after_return, Args will contain a {result, R}
 %%      where R is the return value of the function call you are advising.
 
-%% Proceed function call within an Around Advice.
--define(proceed(FuncCall), aspecterl:proceed(FuncCall)).
+

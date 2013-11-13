@@ -1,7 +1,11 @@
--compile({parse_transform,aspect}).
--include_lib("aspecterl/include/pointcut.hrl").
--include_lib("aspecterl/include/advice.hrl").
--include_lib("aspecterl/include/decorate.hrl").
+% Force file to be parsed with the extractor.
+-compile({parse_transform,aspecterl_extractor}).
+% Tell AspectErl to not try and inject in this file.
+-aspecterl([ exclude ]).
 
-%TODO: Get line number of aspect and offending portion of code.
--define(COMPILE_ERROR(M), io:fwrite("ERROR: ~s\n", [M])).
+%%% Define some helpful macros for library user. %%%
+%% Inject compiler errors via Advice.
+-define(COMPILE_ERROR(M),% TODO: Make it an actual compile time error. 
+            io:fwrite("ERROR(~p:~p): ~s\n", [??MODULE,??LINE,M])).
+%% Proceed function call within an Around Advice.
+-define(proceed(FuncCall), aspecterl_cb:proceed(FuncCall)).

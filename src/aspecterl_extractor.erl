@@ -1,10 +1,12 @@
-%% Aspect.Erl -
+%% Aspect.Erl - The Aspect Extractor
 %%
 %%  This is the module which gets inserted into the pre-processor to strip out
-%%  annotations for advice and pointcuts so that weeving can take place.
+%%  annotations for advice and pointcuts so that weeving can take place. This
+%%  merely updates the global pointcut and advice tables so that the AspectErl
+%%  advice injector (aspecterl.erl) has advice to inject.
 %%
 %%  @author Alexander Dean
--module(aspect).
+-module(aspecterl_extractor).
 -include("advice.hrl").
 -include("pointcut.hrl").
 -include("decorate.hrl").
@@ -18,22 +20,35 @@
            pct = [], % The pointcut table, for weeve calls look-ups
            adv = [], % Advice List, either from advice files or ADF configs.
            %% Compiler Settings %%
-           verbose = false, % Should we print warnings, such as unused advice?
-           debug = false % Should the compiler explain where advice is applied?
+           verbose = false % Should we print warnings, such as unused advice?
+           %,debug = false % Should the compiler explain where advice is applied?
            %% .. TODO: what other compiler flags can we work with?
 }).
 
 %% @doc Loops through the Abstract Syntax Tree and extracts the portions of
 %% interest then injects advice code where it's needed.
 %% @end
-parse_transform( AST, _Options ) -> 
+parse_transform( AST, Options ) ->
+    State = check_options( Options ), 
+    {NewState, NewAST} = pass_one( AST, State ),
+    pass_two( NewState, NewAST ).
+
+
+%%% =========================================================================
+%%% Parse Passes
+%%% =========================================================================
+
+%% @private
+%% @doc Take in the initial state after parsing options, and run through the
+%%   AST to retrieve all PointCuts and Advice. This will delete the attributes
+%%   it recognizes as it goes.
+%% @end
+pass_one( AST, #aspect_pt{ verbose=Verbose }=State ) -> 
     io:fwrite("AST = ~p\n",[AST]),
-    AST.
+    {State,AST}.
 
 
-
-
-
+pass_two( AST, _State ) -> AST.
 
 %%% =========================================================================
 %%% Internal Functionality
@@ -45,9 +60,7 @@ parse_transform( AST, _Options ) ->
 %%   transformer.
 %% @end
 check_options( Options ) ->
-    #aspect_pt{ verbose = check_verbosity( Options ),
-                debug   = check_debug( Options )
-              }.
+    #aspect_pt{ verbose = check_verbosity( Options ) }.
 %% @hidden 
 %% @doc Check compile flags for verbosity. See check_options/1. Defaults to 
 %%      rebar's value.
@@ -57,10 +70,6 @@ check_verbosity( Options ) ->
         undefined -> get_opt( verbose, Options );
         {ok, _ }  -> rebar
     end.
-
-%% @hidden
-%% @doc Check compile flags for debugging. See check_options/1.
-check_debug( Options ) -> get_opt( aspect_debug, Options ).
 
 %% @hidden
 %% @doc Check if a option is apart of the option list.
