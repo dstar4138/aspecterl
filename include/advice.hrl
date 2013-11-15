@@ -28,4 +28,5 @@
 %%      Additionally, if its a after_return, Args will contain a {result, R}
 %%      where R is the return value of the function call you are advising.
 
-
+-define(ADVICE_TYPES, [ 'before','after_throw','after_return',
+                        'after_final','around']).

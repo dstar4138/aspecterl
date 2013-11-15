@@ -1,3 +1,5 @@
+-define(AspectErlAttr, aspecterl). %Use -aspecterl( [...] ).
+
 -ifdef(noaspects). %Turn off aspects by: erlc -Dnoaspects *.erl
 -define(AspectsOn, false).
 -else.
