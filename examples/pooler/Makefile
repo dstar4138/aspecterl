@@ -7,7 +7,7 @@ clean:
 	$(REBAR) clean
 
 aspects_off: deps
-	$(REBAR) update-deps compile -DAspectsOn=false
+	$(REBAR) -Dnoaspects update-deps compile
 
 deps:
 	$(REBAR) get-deps
