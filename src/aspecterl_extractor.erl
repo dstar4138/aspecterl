@@ -67,7 +67,8 @@ epts( [{attribute, Line, pointcut, Args}|R], S, {A,P} ) ->
                              "must be a tuple of the form: "++
                              "{Name, Checks}"}},
             epts( R, S, {[Err|A], P} )
-    end.
+    end;
+epts( [H|R], State, {AST, P} ) -> epts( R, State, {[H|AST], P} ).
                 
 extract_advice( AST, State ) -> eadv( AST, State, {[],[]} ).
 eadv( [], _, {RevAST, Adv} ) -> {lists:reverse(RevAST), Adv};
