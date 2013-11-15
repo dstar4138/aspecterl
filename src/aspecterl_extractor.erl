@@ -7,6 +7,7 @@
 %%
 %%  @author Alexander Dean
 -module(aspecterl_extractor).
+-include("defs.hrl").
 -include("advice.hrl").
 -include("pointcut.hrl").
 -include("decorate.hrl").
@@ -29,6 +30,12 @@
 %% interest then injects advice code where it's needed.
 %% @end
 parse_transform( AST, Options ) ->
+    case ?AspectsOn of
+        true  -> parse( AST, Options );
+        false -> AST
+    end.
+
+parse( AST, Options ) ->
     State = check_options( Options ), 
     {NewState, NewAST} = pass_one( AST, State ),
     pass_two( NewState, NewAST ).

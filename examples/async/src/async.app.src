@@ -1,0 +1,9 @@
+{application, async,
+ [
+  {description, "AspectErl async example"},
+  {vsn, "0.0.1"},
+  {registered, [ async ]},
+  {applications, [kernel, stdlib]},
+  {mod, {async,[]}},
+  {env, []}
+ ]}.

@@ -1,0 +1,3 @@
+-ifndef('AspectsOn').
+-define(AspectsOn, true).
+-endif.
