@@ -131,7 +131,7 @@ check_re( _ ) -> true.
 
 set_pc( Pc, module, Re ) -> Pc#pointcut{module=Re};
 set_pc( Pc, func, Re ) -> Pc#pointcut{func=Re};
-set_pc( Pc, behaiour, Re ) -> Pc#pointcut{behaviour=Re};
+set_pc( Pc, behaviour, Re ) -> Pc#pointcut{behaviour=Re};
 set_pc( Pc, arity, Re ) -> Pc#pointcut{arity=Re}.
 
 

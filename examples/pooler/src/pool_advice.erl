@@ -9,7 +9,7 @@
 -pointcut({bservers, [{behaviour,"gen_server"},
                       {module,"\\w*_b"}]}).
 
--advice([{pointcut,[bservers]},
+-advice([{pointcuts,[bservers]},
          {type,'around'},
          {args, [{default_pool,'bServers'}]}]).
 pool( AroundCall={Module, Func, _Args}, PassedToPool ) ->
