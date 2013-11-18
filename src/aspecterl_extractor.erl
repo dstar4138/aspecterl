@@ -41,6 +41,7 @@ parse( AST, Options ) ->
     {FinalAST, Adv} = extract_advice( NewAST, State ),
     NewState = update_advice( State, PCts, Adv ),
     ok = update_global_table( NewState ),
+    io:format("FinalAST = ~p",[FinalAST]),
     FinalAST.
  
 %%% =========================================================================
@@ -75,7 +76,7 @@ eadv( [], _, {RevAST, Adv} ) -> {lists:reverse(RevAST), Adv};
 eadv( [{attribute, ALine, advice, Args},N|R], State, {AST,Adv} ) -> 
     case is_adv_func( N, ALine, State ) of
         {true, F} -> 
-            (case create_advice( ALine, Args, F ) of
+            (case create_advice( ALine, Args, F, State ) of
                  {ok, A} -> eadv( R, State, { [N|AST], [A|Adv] } );
                  {error, E} -> eadv( R, State, {[E|AST], Adv} )
              end);
@@ -92,9 +93,9 @@ update_advice( State, Pcs, Adv ) ->
     State#aspect_pt{pct=Pcs, adv=Adv}.
 
 
-update_global_table( #aspect_pt{ pct=_Pcs, adv=_Adv } ) ->
-    %TODO: somehow save Pcs. and Adv so that aspecterl_injector can use it.
-    ok.
+update_global_table( #aspect_pt{ pct=Pct, adv=Adv } ) ->
+    aspecterl:update_global_table( Pct, Adv ),
+    ok. %TODO: Inform? debugging?
 
 
 create_pointcut( Line, Name, Checks, S ) ->
@@ -158,7 +159,8 @@ is_adv_func( _, Line, State ) ->
 
 %% @hidden
 %% @doc Creates an Advice object for adding to the global table.
-create_advice( ALine, Args, {M,F} ) ->
+create_advice( ALine, Args, {M,F}, S ) ->
+    inform( S, "Found advice ~p:~p => ~p",[M,F,Args]),
     case check_advice_args( Args, #advice{} ) of
         {ok, Advice} -> 
             {ok, Advice#advice{ module = M, name = F }};
@@ -195,6 +197,8 @@ check_advice_args( [ Bad | _], _ ) ->
 %% @hidden
 %% @doc Verbosely display information about current transformations.
 inform( #aspect_pt{verbose=true}, Msg, Args ) -> io:format( Msg, Args );
+inform( #aspect_pt{verbose=rebar}, Msg, Args ) -> 
+    rebar_log:log( debug, Msg, Args );
 inform( _, _, _ ) -> ok.   
 
 %% @hidden
