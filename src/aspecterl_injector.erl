@@ -18,8 +18,9 @@ parse_transform( AST, Options ) ->
 
 parse( AST, _Options ) ->
     Nope = [ Args || {attribute, _, ?AspectErlAttr, Args} <- AST],
+    Module = parse_trans:get_module( AST ),
     case lists:member(exclude, lists:flatten(Nope)) of
-        true  -> io:fwrite("Ignoring file in injector = ~p\n",[AST]);
+        true  -> io:fwrite("Ignoring file in injector = ~p\n",[Module]);
         false -> io:fwrite("AST = ~p\n",[AST])
     end,
     AST.

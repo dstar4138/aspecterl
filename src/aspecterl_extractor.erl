@@ -119,7 +119,7 @@ check_pointcut_args( [], Pc ) ->
 check_pointcut_args( [{V, Re}|R], Pc ) ->
     case lists:member(V, [module, func, behaviour, arity]) of
         true -> (case check_re( Re ) of
-                     ok -> check_pointcut_args( R, set_pc(Pc, V, Re) );
+                     true -> check_pointcut_args( R, set_pc(Pc, V, Re) );
                      {error, Reason} -> {error, Reason}
                  end);
         false -> {error, io_lib:format("Invalid pointcut argument '~p'", [V])}
