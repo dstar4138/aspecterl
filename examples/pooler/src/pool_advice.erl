@@ -12,7 +12,7 @@
 -advice([{pointcuts,[bservers]},
          {type,'around'},
          {args, [{default_pool,'bServers'}]}]).
-pool( AroundCall={Module, Func, _Args}, PassedToPool ) ->
+pool( AroundCall={Module, Func, _Args,_NewName}, PassedToPool ) ->
     Pool = getPoolName( PassedToPool ),
     io:fwrite("Adding ~p to pool: ~p\n",[Module,Pool]),
     case Func of

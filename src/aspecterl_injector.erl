@@ -35,8 +35,8 @@ parse( AST, Options ) ->
             NewAST;
         false -> 
             FinalAST = injector( NewAST, State ),
-            case FinalAST of %TODO: REMOVE ME!!
-                NewAST -> io:fwrite("Noting Weaved in.~n");
+            case FinalAST of %TODO: REMOVE ME!!j
+                NewAST -> io:fwrite("Nothing Weaved in.~n");
                 _ -> io:fwrite("Final Weaved = ~p~n",[FinalAST])
             end,
             FinalAST

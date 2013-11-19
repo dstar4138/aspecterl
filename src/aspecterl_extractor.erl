@@ -43,7 +43,6 @@ parse( AST, Options ) ->
             {FinalAST, Adv} = extract_advice( NewAST, State ),
             NewState = update_advice( State, PCts, Adv ),
             ok = update_global_table( NewState ),
-            io:format("FinalAST = ~p",[FinalAST]),
             FinalAST;
         false -> AST
     end.

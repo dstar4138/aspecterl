@@ -85,8 +85,6 @@ handle_call(_R,_F,S) -> {noreply, S}.
 %%% =========================================================================
 
 insert_into_table( Adv, Pct ) ->
-    io:fwrite("Adding Advice to table: ~p", [Adv]),
-    io:fwrite("Adding Pointcuts to table: ~p", [Pct]),
     {ok, P} = get_pct_table(),
     true = ets:insert(P, Pct),
     {ok, A} = get_adv_table(),
@@ -113,8 +111,7 @@ internal_check_pointcut( Data ) ->
                [], T ).
 check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
            {Behaviours, Module, Function, Arity, Scope} =D ) ->
-    
-    R = case
+    case
         check_re( F, Function    ) andalso
         check_re( M, Module      ) andalso
         check_rel( B, Behaviours ) andalso
@@ -123,8 +120,7 @@ check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
     of
         true -> {ok, N};
         false -> false
-    end,
-    io:fwrite("     Checking ~p ?= ~p = ~p~n",[{B,M,F,A,S},D,R]),R.
+    end.
 
 check_rel( nil, [] ) -> true;
 check_rel( RE, L ) when is_list(L) ->
