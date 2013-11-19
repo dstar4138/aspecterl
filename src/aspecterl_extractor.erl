@@ -36,13 +36,17 @@ parse_transform( AST, Options ) ->
     end.
 
 parse( AST, Options ) ->
-    State = check_options( AST, Options ), 
-    {NewAST, PCts} = extract_pointcuts( AST, State ),
-    {FinalAST, Adv} = extract_advice( NewAST, State ),
-    NewState = update_advice( State, PCts, Adv ),
-    ok = update_global_table( NewState ),
-    io:format("FinalAST = ~p",[FinalAST]),
-    FinalAST.
+    {HasAdvice, State} = check_options( AST, Options ), 
+    case HasAdvice of
+        true -> 
+            {NewAST, PCts} = extract_pointcuts( AST, State ),
+            {FinalAST, Adv} = extract_advice( NewAST, State ),
+            NewState = update_advice( State, PCts, Adv ),
+            ok = update_global_table( NewState ),
+            io:format("FinalAST = ~p",[FinalAST]),
+            FinalAST;
+        false -> AST
+    end.
  
 %%% =========================================================================
 %%% Parse Passes
@@ -207,11 +211,15 @@ inform( _, _, _ ) -> ok.
 %%   transformer.
 %% @end
 check_options( AST, Options ) ->
-    #aspect_pt{ 
+    Attr = [Args || {attribute, _, ?AspectErlAttr, Args} <- AST],
+    HasAdvice = lists:member(advice_file, lists:flatten( Attr ) ),
+    State = #aspect_pt{ 
         file = parse_trans:get_file( AST ),
         module = parse_trans:get_module( AST ),
         verbose = check_verbosity( Options ) 
-    }.
+    },
+    {HasAdvice, State}.
+
 %% @hidden 
 %% @doc Check compile flags for verbosity. See check_options/1. Defaults to 
 %%      rebar's value.

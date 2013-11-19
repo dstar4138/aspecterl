@@ -26,14 +26,15 @@ parse_transform( AST, Options ) ->
     end.
 
 parse( AST, Options ) ->
-    {Nope, State} = check_options( AST, Options ),
+    NewAST = aspecterl_extractor:parse_transform( AST, Options ),
+    {Nope, State} = check_options( NewAST, Options ),
     case Nope of
         true  -> 
             Module = State#aspect_pt.module,
             io:fwrite("Ignoring file in injector = ~p\n",[Module]), 
-            AST;
+            NewAST;
         false -> 
-            injector( AST, State )
+            injector( NewAST, State )
     end.
 
 injector( AST, State ) ->

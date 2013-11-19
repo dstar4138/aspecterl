@@ -1,7 +1,5 @@
-% Force file to be parsed with the extractor.
--compile({parse_transform,aspecterl_extractor}).
-% Tell AspectErl to not try and inject in this file.
--aspecterl([ exclude ]).
+% Tell AspectErl to not try and inject in this file, because its an advice file.
+-aspecterl([ exclude, advice_file ]).
 
 %%% Define some helpful macros for library user. %%%
 %% Inject compiler errors via Advice.
