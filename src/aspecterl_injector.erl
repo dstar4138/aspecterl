@@ -26,7 +26,7 @@ parse_transform( AST, Options ) ->
     end.
 
 parse( AST, Options ) ->
-    {Nope, State} = parse_trans:get_module( AST ),
+    {Nope, State} = check_options( AST, Options ),
     case Nope of
         true  -> 
             Module = State#aspect_pt.module,
@@ -47,15 +47,16 @@ funloop( [], _, Acc, E ) ->
     AST = lists:reverse(Acc),
     NewAST = insert_exports( AST, E ),
     {ok, NewAST};
-funloop( [{attribute,Line,decorate,Args}|Rest], State, Acc, E ) ->
+funloop( [{attribute,_Line,decorate,_Args}|Rest], State, Acc, E ) ->
     %TODO: Wrap next function with advice from Args.
     funloop( Rest, State, Acc, E );
-funloop( [{function,Line,Name,Arity}=F|Rest], State, Acc, E ) ->
+funloop( [{function,_Line,Name,Arity}=F|Rest], State, Acc, E ) ->
     Data = build_data( Name, Arity, State),
     case aspecterl:check_pointcut( Data ) of
         [] -> % No pointcuts apply to this function.
             funloop( Rest, State, [F|Acc], E );
         Pcts ->
+            inform( State, "Found function which matches pointcuts: ~p", [{Name, Arity}]),
             {Exports, Forms} = test_pointcuts( Pcts, F ),
             funloop( Rest, State, [Forms|Acc], [Exports|E] )
     end;
@@ -97,7 +98,10 @@ weave( #advice{ type=T, module=M, name=F, args=A }, Forms ) ->
     end.
 
 insert_exports( AST, Exports ) ->
-    AST. %TODO: Insert the exports [{Atom(), Arity()},...]
+    lists:foldl( fun( {Func,Arity}, Forms ) -> 
+                         parse_trans:export_function( Func, Arity, Forms ) 
+                 end, AST, Exports).
+
 
 %%% =========================================================================
 %%% Option Parsing
@@ -106,7 +110,7 @@ insert_exports( AST, Exports ) ->
 
 %% @hidden
 %% @doc Verbosely display information about current transformations.
-inform( #aspect_pt{verbose=true}, Msg, Args ) -> io:format( Msg, Args );
+%inform( #aspect_pt{verbose=true}, Msg, Args ) -> io:format( Msg, Args );
 inform( #aspect_pt{verbose=rebar}, Msg, Args ) -> 
     rebar_log:log( debug, Msg, Args );
 inform( _, _, _ ) -> ok.   

@@ -16,6 +16,6 @@
 %% ===========================================================================
 
 %% Proceed within the internals of the captured function
-%% TODO: Is there any masking of self() or the applying function that needs to take place?
-proceed(_FuncCall = {Module, Function, Args}) -> erlang:apply(Module,Function,Args).
+proceed( _FunCall = {_Module, _Function, _Args, _NewFunc}) -> 
+    throw( "Proceed call was unsuccessful, Injection failed." ).
 
