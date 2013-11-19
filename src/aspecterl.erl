@@ -52,18 +52,26 @@ check_pointcut( Data ) ->
                 end,
                [], T ).
 check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
-           {Behaviour, Module, Function, Arity, Scope} ) ->
+           {Behaviours, Module, Function, Arity, Scope} ) ->
     case
-        check_re( F, Function ) andalso
-        check_re( M, Module   ) andalso
-        check_re( B, Behaviour) andalso
-        check_val( S, Scope   ) andalso
-        check_mem( A, Arity   ) 
+        check_re( F, Function    ) andalso
+        check_re( M, Module      ) andalso
+        check_rel( B, Behaviours ) andalso
+        check_val( S, Scope      ) andalso
+        check_mem( A, Arity      ) 
     of
         true -> {ok, N};
         false -> false
     end.
 
+check_rel( nil, [] ) -> true;
+check_rel( RE, L ) when is_list(L) ->
+    lists:foldl( fun ( B, Acc ) ->
+                         Acc andalso check_re(RE, B) 
+                  end, true, L );
+check_rel( _, _)-> false.
+
+check_re( nil, _ ) -> true;
 check_re( RE, Val ) when is_atom(Val) ->
     check_re( RE, erlang:atom_to_binary( Val ) );
 check_re( RE, Val ) ->
