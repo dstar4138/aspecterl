@@ -31,10 +31,15 @@ parse( AST, Options ) ->
     case Nope of
         true  -> 
             Module = State#aspect_pt.module,
-            io:fwrite("Ignoring file in injector = ~p\n",[Module]), 
+            io:fwrite("Ignoring file in injector(~p) = ~p\n",[self(),Module]), 
             NewAST;
         false -> 
-            injector( NewAST, State )
+            FinalAST = injector( NewAST, State ),
+            case FinalAST of %TODO: REMOVE ME!!
+                NewAST -> io:fwrite("Noting Weaved in.~n");
+                _ -> io:fwrite("Final Weaved = ~p~n",[FinalAST])
+            end,
+            FinalAST
     end.
 
 injector( AST, State ) ->
@@ -51,15 +56,16 @@ funloop( [], _, Acc, E ) ->
 funloop( [{attribute,_Line,decorate,_Args}|Rest], State, Acc, E ) ->
     %TODO: Wrap next function with advice from Args.
     funloop( Rest, State, Acc, E );
-funloop( [{function,_Line,Name,Arity}=F|Rest], State, Acc, E ) ->
+funloop( [{function,_Line,Name,Arity,_Clauses}=F|Rest], State, Acc, E ) ->
     Data = build_data( Name, Arity, State),
     case aspecterl:check_pointcut( Data ) of
         [] -> % No pointcuts apply to this function.
             funloop( Rest, State, [F|Acc], E );
         Pcts ->
+            io:fwrite("Found function which matches pointcuts: ~p",[Pcts]),
             inform( State, "Found function which matches pointcuts: ~p", [{Name, Arity}]),
-            {Exports, Forms} = test_pointcuts( Pcts, F ),
-            funloop( Rest, State, [Forms|Acc], [Exports|E] )
+            {Forms, Exports} = test_pointcuts( Pcts, F , State),
+            funloop( Rest, State, Forms++Acc, Exports++E )
     end;
 funloop( [H|R], State, Acc, E ) -> funloop( R, State, [H|Acc], E ).
 
@@ -73,29 +79,27 @@ build_data( Func, Arity, #aspect_pt{module=M,behaviours=B,exported=Es} ) ->
 %% Runs through a list of applicable poincuts and applies them to the given 
 %% function if there are advice that use the pointcuts. It will apply ALL advice
 %% which means they will compound in possibly an unanticipated order.
-test_pointcuts( P, F ) -> test_pointcuts( P, F, [] ).
-test_pointcuts( [], F, E) -> {E, F};
-test_pointcuts( [P|Ps], F, E ) -> 
-    {Es, Fs} = apply_pct( P, [F] ),
-    test_pointcuts( Ps, Fs++F, Es++E ).
-apply_pct( P, Forms ) ->
-    case aspecterl:get_advice( P ) of
-        [] -> {[], [Forms]};
-        Advice -> wrap_advice_list( Advice, Forms, [] )
-    end.
-wrap_advice_list( [], F, E ) -> {E,F};
-wrap_advice_list( [A|Adv], F, E ) -> 
-    {Es,Fs} = weave( A, hd(F) ),
-    wrap_advice_list( Adv, Fs++F, Es++E ).
+test_pointcuts( P, F, State ) -> 
+    lists:foldl( fun( Pct, {Fs, Es}=S ) ->
+                     case aspecterl:get_advice( P ) of
+                        []   -> S;
+                        Advs -> wrap_advice_list( State, Advs, Fs, Es )
+                      end
+             end, {[F],[]}, P).
+wrap_advice_list( _, [], Forms, Exports ) -> {Forms, Exports};
+wrap_advice_list( State, [A|Adv], F, E ) -> 
+    {ok, Es, Fs} = weave( A, hd(F), State ), % Assumes original function is always on top.
+    wrap_advice_list( State, Adv, Fs++F, Es++E ).
 
-%% Weave Advice within an Erlang Forms
-weave( #advice{ type=T, module=M, name=F, args=A }, Forms ) ->
+%% Weave single Advice into a single Erlang Form.
+weave( #advice{ type=T, module=M, name=F, args=A }, Forms, State ) ->
+    Module = State#aspect_pt.module,
     case T of
-        'before'       -> ast_wrapper:before( {M,F,A}, Forms );
-        'after_return' -> ast_wrapper:return( {M,F,A}, Forms );
-        'after_throw'  -> ast_wrapper:onthrow( {M,F,A}, Forms );
-        'after_final'  -> ast_wrapper:final( {M,F,A}, Forms );
-        'around'       -> ast_wrapper:around( {M,F,A}, Forms )
+        'before'       -> ast_wrapper:before( {M,F,A}, Forms, Module );
+        'after_return' -> ast_wrapper:return( {M,F,A}, Forms, Module );
+        'after_throw'  -> ast_wrapper:onthrow( {M,F,A}, Forms, Module );
+        'after_final'  -> ast_wrapper:final( {M,F,A}, Forms, Module );
+        'around'       -> ast_wrapper:around( {M,F,A}, Forms, Module )
     end.
 
 insert_exports( AST, Exports ) ->

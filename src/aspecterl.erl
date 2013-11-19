@@ -8,13 +8,19 @@
 -export([ update_global_table/2, check_pointcut/1, 
           get_advice/1, get_advice/2 ]).
 
+%% INTERNAL EXPORTS ONLY, ETS NEEDS A HOST PROCESS.
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+
+
 %Table Name definitions for ETS.
 -define(PCT_Table, aspecterl_pct_table).
 -define(ADV_Table, aspecterl_adv_table).
--define(AspectErl_TableOpts, [ public, duplicate_bag, 
-                               {write_concurrency, false},
-                               {read_concurrency, false}, 
-                               {keypos, 1}, {heir, none} ]).
+-define(AspectErl_TableOpts, [ public, duplicate_bag, named_table ]).
 
 
 
@@ -23,11 +29,64 @@ compile( _Dir ) ->
 
 
 %%% =========================================================================
+%%% Global Aspect Table Callbacks.
+%%% =========================================================================
+
+update_global_table( Pct, Adv ) ->
+    {ok, _Pid} = check_ets_server(),
+    send_records( Adv, Pct ).
+
+check_ets_server() ->
+    case whereis( ?MODULE ) of
+        undefined -> start();
+        Pid -> {ok, Pid}
+    end.
+
+send_records( Adv, Pct ) -> gen_server:cast(?MODULE, {data, Adv, Pct}), ok.
+check_pointcut( Data ) -> gen_server:call( ?MODULE, {chk_pct, Data}).
+get_advice( PctName ) -> gen_server:call( ?MODULE, {get_adv, PctName}).
+get_advice( Module, Function ) -> gen_server:call(?MODULE, {get_adv, Module, Function}). 
+
+%%% =========================================================================
+%%% gen_server Callback functions
+%%% =========================================================================
+
+start() -> gen_server:start({local, ?MODULE}, ?MODULE, [], []).
+
+% Defaults. %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+init([])->{ok, nil}.
+handle_info(_I, S) -> {noreply, S}.
+terminate(_R, _S) -> ok.
+code_change(_,S,_)->{ok, S}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% We only care about casts from the extractor.
+handle_cast( {data, Adv, Pct}, State ) ->
+    insert_into_table( Adv, Pct ),
+    {noreply, State};
+handle_cast( _,  S ) -> {noreply, S}.
+
+
+% We only care about a call from the injector.
+handle_call({chk_pct, Data}, _F, S) ->
+    Res = internal_check_pointcut( Data ),
+    {reply, Res, S};
+handle_call({get_adv, PctName}, _F, S)->
+    Res = internal_get_advice( PctName ),
+    {reply, Res, S};
+handle_call({get_adv, M, Fun}, _F, S)->
+    Res = internal_get_advice( M, Fun ),
+    {reply, Res, S};
+handle_call(_R,_F,S) -> {noreply, S}.
+
+
+%%% =========================================================================
 %%% Global Aspect Table Functions
 %%% =========================================================================
 
-
-update_global_table( Adv, Pct ) ->
+insert_into_table( Adv, Pct ) ->
+    io:fwrite("Adding Advice to table: ~p", [Adv]),
+    io:fwrite("Adding Pointcuts to table: ~p", [Pct]),
     {ok, P} = get_pct_table(),
     true = ets:insert(P, Pct),
     {ok, A} = get_adv_table(),
@@ -42,9 +101,10 @@ get_table( Table ) ->
     end.
 
 %% Given all the information about a function, return if any pointcuts match.
-check_pointcut( Data ) ->
+internal_check_pointcut( Data ) ->
     {ok, T} = get_pct_table(),
     ets:foldl( fun( Row , Acc ) ->
+                    io:fwrite(" GOT ROW: ~p~n",[Row]),
                     case check_pct( Row, Data ) of
                         {ok, Name} -> [Name|Acc];
                         false      -> Acc
@@ -52,8 +112,9 @@ check_pointcut( Data ) ->
                 end,
                [], T ).
 check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
-           {Behaviours, Module, Function, Arity, Scope} ) ->
-    case
+           {Behaviours, Module, Function, Arity, Scope} =D ) ->
+    
+    R = case
         check_re( F, Function    ) andalso
         check_re( M, Module      ) andalso
         check_rel( B, Behaviours ) andalso
@@ -62,7 +123,8 @@ check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
     of
         true -> {ok, N};
         false -> false
-    end.
+    end,
+    io:fwrite("     Checking ~p ?= ~p = ~p~n",[{B,M,F,A,S},D,R]),R.
 
 check_rel( nil, [] ) -> true;
 check_rel( RE, L ) when is_list(L) ->
@@ -73,7 +135,7 @@ check_rel( _, _)-> false.
 
 check_re( nil, _ ) -> true;
 check_re( RE, Val ) when is_atom(Val) ->
-    check_re( RE, erlang:atom_to_binary( Val ) );
+    check_re( RE, atom_to_list( Val ) );
 check_re( RE, Val ) ->
     case re:run( Val, RE ) of
         {match, _} -> true;
@@ -83,13 +145,14 @@ check_re( RE, Val ) ->
 check_val( 'any', _ ) -> true;
 check_val( A, A ) -> true;
 check_val( _, _ ) -> false.
-    
-check_mem( [], _ ) -> true;
+
+check_mem( nil, _ ) -> true;
+check_mem( [], _ )  -> true;
 check_mem( L, M) when is_list(L) ->
     lists:member( M, L ).
 
 %% Get all advice which are triggered by the pointcut name,
-get_advice( PctName ) ->
+internal_get_advice( PctName ) ->
     {ok, T} = get_adv_table(),
     ets:foldl( fun( Row, Acc ) ->
                        case check_adv( Row, PctName ) of
@@ -102,7 +165,7 @@ check_adv( #advice{pointcuts=Ps}, P ) ->
 
 % Get advice by Module and Function name, such as when advice happens.
 % if module is blank, pass in nil.
-get_advice( Module, Function ) ->
+internal_get_advice( Module, Function ) ->
     {ok, T} = get_adv_table(),
     ets:foldl( fun( Row, Acc ) ->
                        case check_adv( Row, Module, Function ) of
