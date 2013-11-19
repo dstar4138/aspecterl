@@ -35,7 +35,7 @@ parse( AST, Options ) ->
             NewAST;
         false -> 
             FinalAST = injector( NewAST, State ),
-            case FinalAST of %TODO: REMOVE ME!!j
+            case FinalAST of %TODO: REMOVE ME!!
                 NewAST -> io:fwrite("Nothing Weaved in.~n");
                 _ -> io:fwrite("Final Weaved = ~p~n",[FinalAST])
             end,
@@ -62,7 +62,7 @@ funloop( [{function,_Line,Name,Arity,_Clauses}=F|Rest], State, Acc, E ) ->
         [] -> % No pointcuts apply to this function.
             funloop( Rest, State, [F|Acc], E );
         Pcts ->
-            io:fwrite("Found function which matches pointcuts: ~p",[Pcts]),
+            io:fwrite("Found function which matches pointcuts: ~p~n",[Pcts]),
             inform( State, "Found function which matches pointcuts: ~p", [{Name, Arity}]),
             {Forms, Exports} = test_pointcuts( Pcts, F , State),
             funloop( Rest, State, Forms++Acc, Exports++E )

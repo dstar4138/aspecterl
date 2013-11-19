@@ -102,7 +102,6 @@ get_table( Table ) ->
 internal_check_pointcut( Data ) ->
     {ok, T} = get_pct_table(),
     ets:foldl( fun( Row , Acc ) ->
-                    io:fwrite(" GOT ROW: ~p~n",[Row]),
                     case check_pct( Row, Data ) of
                         {ok, Name} -> [Name|Acc];
                         false      -> Acc
