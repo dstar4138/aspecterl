@@ -68,14 +68,14 @@ final( Fun, Forms, Module ) -> {ok, [], [Forms]}.
 
 %% @doc Set the Args variable equal to the list of parameters.
 set_args( Line, Arity ) ->
-    Args = argnames( Arity ),
+    Args = argslist( Arity, Line ),
     {match, Line, {var, Line, 'Args'}, mklist( Line, Args )}.
 
 %% @doc Builds the function tuple expected by the Proceed function.
 build_proceed_func( Line, Module, Name, Arity, NewFunc ) ->
     mktuple( Line, [ mkatom(Line, Module),
                      mkatom(Line, Name),
-                     mklist(Line, argnames( Arity) ), 
+                     mklist(Line, argslist(Arity, Line) ), 
                      mkatom(Line, NewFunc) ]).
 
 

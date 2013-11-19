@@ -31,13 +31,15 @@ parse( AST, Options ) ->
     case Nope of
         true  -> 
             Module = State#aspect_pt.module,
-            io:fwrite("Ignoring file in injector(~p) = ~p\n",[self(),Module]), 
+            inform(State, "Ignoring file in injector => ~p\n",[Module]), 
             NewAST;
         false -> 
             FinalAST = injector( NewAST, State ),
-            case FinalAST of %TODO: REMOVE ME!!
-                NewAST -> io:fwrite("Nothing Weaved in.~n");
-                _ -> io:fwrite("Final Weaved = ~p~n",[FinalAST])
+            case FinalAST of 
+                NewAST -> inform(State,"Nothing Weaved in ~p.~n",[
+                                                      State#aspect_pt.module]);
+                _DifAST-> io:fwrite("Final Weaving = ~p~n",[ %TODO: inform
+                                                      FinalAST])
             end,
             FinalAST
     end.
@@ -62,7 +64,6 @@ funloop( [{function,_Line,Name,Arity,_Clauses}=F|Rest], State, Acc, E ) ->
         [] -> % No pointcuts apply to this function.
             funloop( Rest, State, [F|Acc], E );
         Pcts ->
-            io:fwrite("Found function which matches pointcuts: ~p~n",[Pcts]),
             inform( State, "Found function which matches pointcuts: ~p", [{Name, Arity}]),
             {Forms, Exports} = test_pointcuts( Pcts, F , State),
             funloop( Rest, State, Forms++Acc, Exports++E )
@@ -79,17 +80,23 @@ build_data( Func, Arity, #aspect_pt{module=M,behaviours=B,exported=Es} ) ->
 %% Runs through a list of applicable poincuts and applies them to the given 
 %% function if there are advice that use the pointcuts. It will apply ALL advice
 %% which means they will compound in possibly an unanticipated order.
-test_pointcuts( P, F, State ) -> 
-    lists:foldl( fun( Pct, {Fs, Es}=S ) ->
-                     case aspecterl:get_advice( P ) of
-                        []   -> S;
-                        Advs -> wrap_advice_list( State, Advs, Fs, Es )
-                      end
-             end, {[F],[]}, P).
-wrap_advice_list( _, [], Forms, Exports ) -> {Forms, Exports};
-wrap_advice_list( State, [A|Adv], F, E ) -> 
-    {ok, Es, Fs} = weave( A, hd(F), State ), % Assumes original function is always on top.
-    wrap_advice_list( State, Adv, Fs++F, Es++E ).
+test_pointcuts( Ps, F, State ) -> 
+    {NewF, Fs, Es} = 
+        lists:foldl( fun( Pct, {NewF, Fs, Es}=S ) ->
+                         case aspecterl:get_advice( Pct ) of
+                            []   -> S;
+                            Advs -> wrap_advice_list( State, Advs, NewF, Fs, Es )
+                          end
+                     end, {F,[],[]}, Ps),
+    {[NewF|Fs],Es}.
+
+wrap_advice_list( _, [], Fun, Forms, Exports ) -> {Fun, Forms, Exports};
+wrap_advice_list( State, [A|Adv], Fun, Fs, E ) -> 
+    % Assumes Original function is on top.
+    {ok, Es, [NewFun|NewForms]} = weave( A, Fun, State ),
+    inform(State, "AspectErl weaved: ~p~n with ~p~n",[fun_name(State, Fun), 
+                                                      adv_name(A)]),
+    wrap_advice_list( State, Adv, NewFun, NewForms++Fs, Es++E ).
 
 %% Weave single Advice into a single Erlang Form.
 weave( #advice{ type=T, module=M, name=F, args=A }, Forms, State ) ->
@@ -106,6 +113,10 @@ insert_exports( AST, Exports ) ->
     lists:foldl( fun( {Func,Arity}, Forms ) -> 
                          parse_trans:export_function( Func, Arity, Forms ) 
                  end, AST, Exports).
+
+fun_name( #aspect_pt{module=M},
+          {function, _line, Name, _Arity, _Clauses} ) -> {M, Name}.
+adv_name( #advice{ module = Module, name = Name } ) -> {Module, Name}.
 
 
 %%% =========================================================================
