@@ -6,4 +6,9 @@
 -define(COMPILE_ERROR(M),% TODO: Make it an actual compile time error. 
             io:fwrite("ERROR(~p:~p): ~s\n", [?MODULE,?LINE,M])).
 %% Proceed function call within an Around Advice.
--define(proceed(FuncCall), aspecterl_cb:proceed(FuncCall)).
+-define(proceed(FuncCall), begin
+            case FuncCall of
+                {M,_,A,F} -> erlang:apply(M,F,A);
+                _ -> throw("Proceed's parameter is not valid.")
+            end
+        end).

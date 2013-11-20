@@ -14,13 +14,14 @@
          {args, [{default_pool,'bServers'}]}]).
 pool( AroundCall={Module, Func, _Args,_NewName}, PassedToPool ) ->
     Pool = getPoolName( PassedToPool ),
-    io:fwrite("Adding ~p to pool: ~p\n",[Module,Pool]),
     case Func of
         start_link -> % Started, and linked to caller. 
+              io:fwrite("Adding ~p to pool: ~p\n",[Module,Pool]),
               {ok, Pid} = ?proceed(AroundCall),
               add_to_pool(Pid,Pool),
               {ok, Pid};
           start ->      % Started, without a link.
+              io:fwrite("Adding ~p to pool: ~p\n",[Module,Pool]),
               {ok, Pid} = ?proceed(AroundCall),
               add_to_pool(Pid, Pool),
               {ok, Pid};
