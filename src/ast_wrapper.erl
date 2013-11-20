@@ -29,11 +29,9 @@ before( Before, {function, Line, Name, Arity, Clauses}, Module ) ->
           {clause, Line, argslist( Arity, Line ),
             [], 
             [  
-               % Args = [ P1, P2, ... ],
-               % T = Before( {Module, Name, Args, NewFunc}, BeforeArgs ),
+               % Before( {Module, Name, Args, NewFunc}, BeforeArgs ),
                % R = NewFunc( P1, P2, ... ).
-               set_args( Line, Arity ),
-               run_save_fun( Line, Before, Module, Name, Arity, NewFunc ), 
+               run_save_fun( false, Line, Before, Module, Name, Arity, NewFunc ), 
                run_func( Line, NewFunc, Arity )
             ]
           }
@@ -50,10 +48,9 @@ around( Around, {function, Line, Name, Arity, Clauses}, Module ) ->
               {clause, Line, argslist( Arity, Line ),
                [],
                [
-                % Args = [ P1, P2, ... ],
-                % R = Around( {Module, Name, Args, NewFunc}, AroundArgs ).
-                set_args( Line, Arity ),
-                run_save_fun( Line, Around, Module, Name, Arity, NewFunc )
+                % Around( {Module, Name, Args, NewFunc}, AroundArgs ).
+                % set_args( Line, Arity ),
+                run_save_fun( false, Line, Around, Module, Name, Arity, NewFunc )
                 ]
               }
             ]
@@ -67,9 +64,9 @@ onthrow( Fun, Forms, Module ) -> {ok, [], [Forms]}.
 final( Fun, Forms, Module ) -> {ok, [], [Forms]}.
 
 %% @doc Set the Args variable equal to the list of parameters.
-set_args( Line, Arity ) ->
-    Args = argslist( Arity, Line ),
-    {match, Line, {var, Line, 'Args'}, mklist( Line, Args )}.
+%set_args( Line, Arity ) ->
+%    Args = argslist( Arity, Line ),
+%    {match, Line, {var, Line, 'Args'}, mklist( Line, Args )}.
 
 %% @doc Builds the function tuple expected by the Proceed function.
 build_proceed_func( Line, Module, Name, Arity, NewFunc ) ->
@@ -80,12 +77,15 @@ build_proceed_func( Line, Module, Name, Arity, NewFunc ) ->
 
 
 % T = M:F( {Module, Name, Args}, A ).
-run_save_fun( Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
-    {match, Line, {var, Line, 'T'},
-                  {call, Line, 
-                        mkapply( Line, M, F ),
-                        [ build_proceed_func( Line, Module, Name, Arity, NewName ),
-                          term_to_forms(Line, A)] }}.
+run_save_fun( Save, Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
+    Call = {call, Line, mkapply( Line, M, F ),
+                [ build_proceed_func( Line, Module, Name, Arity, NewName ),
+                  term_to_forms(Line, A)] },
+    case Save of
+        true -> {match, Line, {var, Line, 'T'}, Call};
+        false -> Call
+    end.
+
 % R = FuncName( P1, P2, ...),
 run_func( Line, FuncName, Arity ) ->
     {match, Line, {var, Line, 'R'},

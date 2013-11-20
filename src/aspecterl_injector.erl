@@ -38,8 +38,7 @@ parse( AST, Options ) ->
             case FinalAST of 
                 NewAST -> inform(State,"Nothing Weaved in ~p.~n",[
                                                       State#aspect_pt.module]);
-                _DifAST-> io:fwrite("Final Weaving = ~p~n",[ %TODO: inform
-                                                      FinalAST])
+                _DifAST-> inform(State,"Final Weaving = ~p~n",[FinalAST])
             end,
             FinalAST
     end.
@@ -55,9 +54,29 @@ funloop( [], _, Acc, E ) ->
     AST = lists:reverse(Acc),
     NewAST = insert_exports( AST, E ),
     {ok, NewAST};
-funloop( [{attribute,_Line,decorate,_Args}|Rest], State, Acc, E ) ->
-    %TODO: Wrap next function with advice from Args.
-    funloop( Rest, State, Acc, E );
+funloop( [{attribute,Line,decorate,Args}|Rest], State, Acc, E ) ->
+    {AdvMod,AdvFun,AdvArgs} = case Args of 
+                                {F,A}   -> {nil,F,A};
+                                {M,F,A} -> {M,F,A} 
+                              end,
+    case aspecterl:get_advice(AdvMod,AdvFun) of
+        [] -> Error = {error,{Line, State#aspect_pt.module,"Decorator uses "++
+                              "unknown advice function."}},
+              funloop( Rest, State, [Error|Acc], E);
+        Adv -> 
+               [NextF | LRest] = Rest,
+               case NextF of 
+                   {function,_,_,_,_} -> 
+                        NAdv = update_adv_args(Adv,AdvArgs),
+                        {NF, Funs, Es} = 
+                                wrap_advice_list(State, NAdv, NextF, [], []),
+                        funloop( [NF|LRest], State, Funs++Acc, Es++E ); 
+                   _ -> 
+                        Error = {error,{Line,State#aspect_pt.module,
+                                "Decorator must decorate a function."}},
+                        funloop( Rest, State, [Error|Acc], E )
+                end
+    end;
 funloop( [{function,_Line,Name,Arity,_Clauses}=F|Rest], State, Acc, E ) ->
     Data = build_data( Name, Arity, State),
     case aspecterl:check_pointcut( Data ) of
@@ -76,6 +95,11 @@ build_data( Func, Arity, #aspect_pt{module=M,behaviours=B,exported=Es} ) ->
                 true -> 'public'; false -> 'private'
             end,
     { B, M, Func, Arity, Scope }.
+
+update_adv_args( Adv, Args ) -> 
+    lists:foldl( fun( #advice{args=Old}=A, Acc ) ->
+                        [A#advice{args=Args++Old}|Acc]
+                 end, [], Adv ).
 
 %% Runs through a list of applicable poincuts and applies them to the given 
 %% function if there are advice that use the pointcuts. It will apply ALL advice

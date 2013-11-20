@@ -37,3 +37,10 @@ exists (badarg,bServer).
 To quit:
 
     > pooler:stop().
+
+You can also test the `decorate` annotation by uncommenting line 29 of the 
+`server1_a` module. This will force the pool function to be injected around 
+this particular function. Follow the same steps as above and you should see
+another message appear when you run `pooler:start()`.
+
+
