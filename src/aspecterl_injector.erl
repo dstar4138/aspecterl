@@ -33,11 +33,11 @@ parse( AST, Options ) ->
         true  -> 
             Module = State#aspect_pt.module,
             inform(State, "Ignoring file in injector => ~p\n",[Module]), 
-            NewAST;
+            NewerAST;
         false -> 
-            FinalAST = injector( NewAST, State ),
+            FinalAST = injector( NewerAST, State ),
             case FinalAST of 
-                NewAST -> inform(State,"Nothing Weaved in ~p.~n",[
+                NewerAST -> inform(State,"Nothing Weaved in ~p.~n",[
                                                       State#aspect_pt.module]);
                 _DifAST-> inform(State,"Final Weaving = ~p~n",[FinalAST])
             end,
