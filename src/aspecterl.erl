@@ -47,10 +47,18 @@ check_ets_server() ->
         Pid -> {ok, Pid}
     end.
 
-send_records( Adv, Pct ) -> gen_server:cast(?MODULE, {data, Adv, Pct}), ok.
-check_pointcut( Data ) -> gen_server:call( ?MODULE, {chk_pct, Data}).
-get_advice( PctName ) -> gen_server:call( ?MODULE, {get_adv, PctName}).
-get_advice( Module, Function ) -> gen_server:call(?MODULE, {get_adv, Module, Function}). 
+send_records( Adv, Pct ) -> 
+    check_ets_server(),
+    gen_server:cast(?MODULE, {data, Adv, Pct}), ok.
+check_pointcut( Data ) -> 
+    check_ets_server(),
+    gen_server:call( ?MODULE, {chk_pct, Data}).
+get_advice( PctName ) -> 
+    check_ets_server(),
+    gen_server:call( ?MODULE, {get_adv, PctName}).
+get_advice( Module, Function ) -> 
+    check_ets_server(),
+    gen_server:call(?MODULE, {get_adv, Module, Function}). 
 
 %%% =========================================================================
 %%% gen_server Callback functions

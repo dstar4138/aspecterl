@@ -29,7 +29,7 @@
 % They all return: {ok, NewExports, NewForms}.
 -export([ before/3, return/3, onthrow/3, final/3, around/3 ]).
 % Function for Injecting missing function based on behaviours.
--export([ inject_error_fun/3 ]).
+-export([ inject_error_fun/4 ]).
 
 %% Modifies the Function forms passed in so that it calls the the Fun before
 %% each clause of the Function definition. In otherwords It converts:
@@ -205,15 +205,16 @@ final( OnFinal, {function, Line, Name, Arity, Clauses}, Module ) ->
     {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
 %% @doc Injects a function into the AST that just throws an error when called.
-inject_error_fun( Fun, Arity, AST ) ->
+inject_error_fun( Module, Fun, Arity, AST ) ->
     DUMMY_LINE = 9001,
     FakeFun = {function,DUMMY_LINE,Fun, Arity,
-                [{clause, DUMMY_LINE, argslist( Arity, DUMMY_LINE ), [],
-                   [{call, DUMMY_LINE, {atom, DUMMY_LINE, throw},
-                      [{call, DUMMY_LINE, {remote, DUMMY_LINE, {atom, DUMMY_LINE, io_lib}, {atom,DUMMY_LINE,format}},
-                                [ {string, DUMMY_LINE, "AspectErl Injected function called with parameters: ~p~n"},
-                                  argslist( Arity, DUMMY_LINE ) ]}]}]}]},
-    NewAST = parse_trans:do_insert_forms( below, FakeFun, AST, [] ),
+                [{clause, DUMMY_LINE, argsdlist( Arity, DUMMY_LINE ), [],
+                   [{call, DUMMY_LINE, {atom, DUMMY_LINE, error},
+                       [{string,DUMMY_LINE,"AspectErl Injected function called!"}]}]}]},
+%                      [{call, DUMMY_LINE, {remote, DUMMY_LINE, {atom, DUMMY_LINE, io_lib}, {atom,DUMMY_LINE,format}},
+%                                [ {string, DUMMY_LINE, "AspectErl Injected function called ~p:~p/~p~n"},
+%                                  mklist(DUMMY_LINE, [Module, Fun, Arity] ) ]}]}]}]},
+    NewAST = lists:reverse([FakeFun|lists:reverse(AST)]), %insert below.
     parse_trans:export_function( Fun, Arity, NewAST ).
 
 
@@ -278,6 +279,11 @@ gen_mkfunc( Line, Name, Arity, Clauses ) ->
 argslist( N, L ) -> argslist( N, L, [] ).
 argslist( 0, _, R ) -> R;
 argslist( N, L, R ) -> argslist( N-1, L, [ mkvar( L, N ) | R ] ).
+
+argsdlist( N, L ) -> argsdlist( N, L, [] ).
+argsdlist( 0, _, R ) -> R;
+argsdlist( N, L, R ) -> argsdlist( N-1, L, [ {var,L,'_'} | R ] ).
+
 
 %% @hidden
 %% @doc Our temporary Parameters are called P# where # is its position starting 

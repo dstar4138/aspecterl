@@ -8,14 +8,14 @@
 -export( [init/1] ).
 
 % Will inject all needed functions for application or supervisor
--aspect( [inject_missing] ).
+-aspecterl( [inject_missing] ).
 
 % Ease of use function for init.
 -define(CHILD(Mod, Type, Args), {Mod, {Mod, start_link, Args},
                                      permanent, 5000, Type, [Mod]}).
 
 % Start self as a supervisor too.
-start(_, Args) -> async:start_link( {local, ?MODULE}, ?MODULE, [Args] ).
+start(_, Args) -> supervisor:start_link( {local, ?MODULE}, ?MODULE, [Args] ).
 
 
 % Easy to see that the Args from start/2 fall down to the supervisor's init/1.

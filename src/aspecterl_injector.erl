@@ -200,9 +200,9 @@ get_opt( Opt, Options ) -> lists:member( Opt, Options ).
 %%   and do it. We need to first verify we have all the functions neccessary.
 %% @end
 update_if_missing(#aspect_pt{inject_missing=false}, AST) -> AST;
-update_if_missing(#aspect_pt{behaviours=Bhvs,exported=Expts}, AST ) ->
+update_if_missing(#aspect_pt{module=Module,behaviours=Bhvs,exported=Expts}, AST ) ->
     lists:foldl( fun( {Fun, Arity}, AltAST ) ->
-                         ast_wrapper:inject_error_fun( Fun, Arity, AltAST )
+                         ast_wrapper:inject_error_fun( Module, Fun, Arity, AltAST )
                  end, AST, validate_missing( Bhvs, Expts )).
 
 %% @hidden
@@ -211,8 +211,11 @@ update_if_missing(#aspect_pt{behaviours=Bhvs,exported=Expts}, AST ) ->
 %%   behaviours need the same name/arity function.
 %% @end %TODO: should this be changed to allow for multi-behaviour overloading?
 validate_missing( Behaviours, Exports ) -> 
+    io:fwrite("Checking behaviours(~p) for missing exports in (~p)~n",[Behaviours, Exports]),
     validate_missing( Behaviours, Exports, [] ).
-validate_missing( [], _, M ) -> M;
+validate_missing( [], _, M ) -> 
+    io:fwrite("Found Missing functions, now injecting: ~p~n",[M]),
+    M;
 validate_missing( [B|R], Es, Ms) -> 
     {Missing, NEs} =
       lists:foldl( fun( Item, {Missing, Expts} ) ->
