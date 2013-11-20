@@ -1,28 +1,33 @@
+%% AspectErl
+%%  This module does two things: It provides access to the internal global
+%%  pointcut and advice tables stored in ETS to the parse transformers. It also
+%%  gives user and system callback functions such as compile/1.
+%%
+%% @author Alexander Dean
 -module(aspecterl).
 -include("advice.hrl").
 -include("pointcut.hrl").
 
+% User and System callbacks.
 -export([compile/1]).
 
 % Internal Functionality for accessing the ETS table.
 -export([ update_global_table/2, check_pointcut/1, 
           get_advice/1, get_advice/2 ]).
 
-%% INTERNAL EXPORTS ONLY, ETS NEEDS A HOST PROCESS.
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
-
+%% INTERNAL EXPORTS ONLY, ETS NEEDS A HOST PROCESS. %%%%%%%%%%%%%%%
+-export([ init/1, handle_call/3, handle_cast/2, handle_info/2,
+          terminate/2, code_change/3 ]).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %Table Name definitions for ETS.
 -define(PCT_Table, aspecterl_pct_table).
 -define(ADV_Table, aspecterl_adv_table).
 -define(AspectErl_TableOpts, [ public, duplicate_bag, named_table ]).
 
-
+%%% =========================================================================
+%%% User and System Callbacks.
+%%% =========================================================================
 
 compile( _Dir ) ->
     ok. %TODO: Compile with ADF File.
@@ -109,7 +114,7 @@ internal_check_pointcut( Data ) ->
                 end,
                [], T ).
 check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
-           {Behaviours, Module, Function, Arity, Scope} =D ) ->
+           {Behaviours, Module, Function, Arity, Scope} ) ->
     case
         check_re( F, Function    ) andalso
         check_re( M, Module      ) andalso

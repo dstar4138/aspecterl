@@ -2,6 +2,25 @@
 %%  
 %%  This module abstracts the usage of the Erlang Abstract Syntax Tree from
 %%  the injection code. Please see the aspecterl_injector module for details.
+%%  AspectErl only provides five methods of injection:
+%%
+%%      * Before - Advice gets called before function execution, will get access
+%%          to the parameters passed in.
+%%  
+%%      * OnReturn - Advice gets called after function execution, will get 
+%%          access to parameters passed in and return value. Will not get to 
+%%          edit it.
+%%      
+%%      * OnThrow - Advice gets called if function throws an error, will get
+%%          access to parameters passed in and error code in form 
+%%          {throw, {Er,Rz}}.
+%%      
+%%      * OnFinal - Advice gets called after function execution. If function
+%%          throws an error, or error handling breaks, Advice still gets 
+%%          executed. Will get access to parameters passed in.
+%%      
+%%      * Around - Advice gets called in place of function. It is up to advice
+%%          to call the provided ?proceed(...) macro to run the function. 
 %%
 %% @author Alexander Dean
 -module(ast_wrapper).
@@ -14,13 +33,15 @@
 %% Modifies the Function forms passed in so that it calls the the Fun before
 %% each clause of the Function definition. In otherwords It converts:
 %%
-%% f( X, Y, Z ) -> stuff...
-%% To:
-%% f( X, Y, Z ) -> 
-%%    Args = [A,B,C],
-%%    M:F( {?Module, f, [X,Y,Z]}, A )
-%%    erlang:apply( f_@ae, Args ).
-%% f_@ae( A, B, C ) -> stuff... 
+%% f( X, Y, ... ) -> ...stuff...
+%% 
+%% to
+%%
+%% f( P1, P2, ... ) -> 
+%%     Before( {?MODULE, f, [P1,P2,...], f_@}, Args), 
+%%     f_@( P1, P2, ... ).
+%% f_@( X, Y, ... ) -> ...stuff... 
+%%
 before( Before, {function, Line, Name, Arity, Clauses}, Module ) -> 
     {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
     NewFunction = 
@@ -40,6 +61,16 @@ before( Before, {function, Line, Name, Arity, Clauses}, Module ) ->
     {ok, [{NewFunc,Arity}],
          [NewFunction, RenamedFunc]}.
 
+%% Modifies the Function forms passed in so that it calls the Fun instead.
+%% It is up to the Around Function to call the ?proceed() macro. It converts:
+%%
+%% f( X, Y, ... ) -> ...stuff...
+%%
+%% to
+%%
+%% f( P1, P2, ... ) -> Around( {?MODULE, f, [P1,P2,..] f_@}, Args).
+%% f_@( X, Y, ... ) -> ...stuff...
+%%
 around( Around, {function, Line, Name, Arity, Clauses}, Module ) ->
     {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
     NewFunction = 
@@ -49,7 +80,6 @@ around( Around, {function, Line, Name, Arity, Clauses}, Module ) ->
                [],
                [
                 % Around( {Module, Name, Args, NewFunc}, AroundArgs ).
-                % set_args( Line, Arity ),
                 run_save_fun( false, Line, Around, Module, Name, Arity, NewFunc )
                 ]
               }
@@ -57,17 +87,124 @@ around( Around, {function, Line, Name, Arity, Clauses}, Module ) ->
         },
     {ok, [{NewFunc, Arity}], [NewFunction, RenamedFunc]}.
 
+%% Modifies the Function forms passed in so that it calls Fun after the original
+%% function finishes. The result of the old function is weaved around Funs
+%% execution and returned. It converts:
+%%
+%% f( X, Y, ... ) -> ...stuff...
+%%
+%% to
+%%
+%% f( P1, P2, ... ) -> 
+%%     R = f_@( P1, P2, ... ),
+%%     OnReturn( {?MODULE, f, [P1,P2,...], f_@}, [{return,R}|Args] ),
+%%     R.
+%% f_@( X, Y, ... ) -> ...stuff..
+%%
+return( OnReturn, {function, Line, Name, Arity, Clauses}, Module ) -> 
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+    NewFunction = 
+        {function, Line, Name, Arity,
+            [ %Arg List - Pulled from Clauses.
+               {clause, Line, argslist( Arity, Line ), 
+                 [],
+                 [
+                  % R = M:F( A ),
+                  % OnReturn( {Module, Name, Args, NewFunc}, [{return,R}|RetArgs] ),
+                  % R.
+                  run_func( Line, NewFunc, Arity ),
+                  run_save_fun_append( false, Line, OnReturn, Module, Name, Arity, NewFunc, 'R' ),
+                  {var,Line,'R'}
+                 ]
+               }
+            ]
+        },
+    {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
-%TODO: Implement Other types of advice.
-return( Fun, Forms, Module ) -> {ok, [], [Forms]}.
-onthrow( Fun, Forms, Module ) -> {ok, [], [Forms]}.
-final( Fun, Forms, Module ) -> {ok, [], [Forms]}.
+%% Modifies the Function forms passed in so that it calls Fun only if the 
+%% original function throws an exception. The exception data will be passed
+%% to the advice function via the Args. It converts:
+%%
+%% f( X, Y, ... ) -> ...stuff...
+%%
+%% to
+%%
+%% f( P1, P2, ... ) ->
+%%     try f_@( P1, P2, ... )
+%%     catch Er:Rz ->
+%%         Throw = {Er,Rz}
+%%         OnThrow( {?MODULE, f, [P1,P2,...], f_@}, [{throw,Throw}|ThrowArgs])
+%%     end.
+%% f_@( X, Y, ... ) -> ...stuff...
+%%
+onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module ) ->
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+    NewFunction = 
+        {function, Line, Name, Arity,
+            [ %Arg List - Pulled from Clauses.
+               {clause, Line, argslist( Arity, Line ), 
+                 [],
+                 [
+                  % try M:F( P1, P2, ... ), 
+                  % catch Er:Rz ->
+                  %     Throw = {Er, Rz}, 
+                  %     OnThrow( {Module, Name, Args, NewFunc}, 
+                  %              [{throw,Throw}|ThrowArgs])
+                  % end
+                  {'try',Line,
+                   [ run_func( Line, NewFunc, Arity ) ],
+                   [],
+                   [ {clause, Line, [{var,Line,'Er'},{var, Line, 'Rz'}], [],
+                     [  {match, Line, {var, Line, 'Throw'}, {tuple, Line, [{var,Line,'Er'},{var,Line,'Rz'}]}},
+                        run_save_fun_append( false, Line, OnThrow, Module, Name, Arity, NewFunc, 'Throw' ) 
+                     ]}
+                   ],[]}
+                 ]
+               }
+            ]
+        },
+    {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
-%% @doc Set the Args variable equal to the list of parameters.
-%set_args( Line, Arity ) ->
-%    Args = argslist( Arity, Line ),
-%    {match, Line, {var, Line, 'Args'}, mklist( Line, Args )}.
+%% Modifies the Function forms passed in so that it calls Fun at the end of the
+%% function even if an exception is thrown. This advice does not get access to
+%% the exception. It converts:
+%%
+%% f( X, Y, ... ) -> ...stuff...
+%%
+%% to
+%%
+%% f( P1, P2, ... ) -> 
+%%     try f_@( P1, P2, ... )
+%%     after OnFinal( {?MODULE, f, [P1,P2,...], f_@}, FinArgs )
+%%     end.
+%% f_@( X, Y, ... ) -> ...stuff...
+%%
+final( OnFinal, {function, Line, Name, Arity, Clauses}, Module ) ->
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+    NewFunction = 
+        {function, Line, Name, Arity,
+            [ %Arg List - Pulled from Clauses.
+               {clause, Line, argslist( Arity, Line ), 
+                 [],
+                 [
+                  % try M:F( P1, P2, ... )
+                  % after
+                  %     OnFinal( {Module, Name, Args, NewFunc}, FinArgs)
+                  % end
+                  {'try',Line,
+                   [ run_func( Line, NewFunc, Arity ) ],
+                   [], [],
+                   [ 
+                      run_save_fun( false, Line, OnFinal, Module, Name, Arity, NewFunc )
+                   ]}
+                 ]
+               }
+            ]
+        },
+    {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
+
+%% @private
 %% @doc Builds the function tuple expected by the Proceed function.
 build_proceed_func( Line, Module, Name, Arity, NewFunc ) ->
     mktuple( Line, [ mkatom(Line, Module),
@@ -75,8 +212,23 @@ build_proceed_func( Line, Module, Name, Arity, NewFunc ) ->
                      mklist(Line, argslist(Arity, Line) ), 
                      mkatom(Line, NewFunc) ]).
 
+%% @private
+%% @doc Like the next function builds a runner function, but for the Advice
+%%   function of the form:
+%%              T = M:F( {Module, Name, Args}, [V|A] ).
+run_save_fun_append( Save, Line, {M,F,A}, Module, Name, Arity, NewName, Var ) ->
+    Call = {call, Line, mkapply( Line, M, F ),
+                [ build_proceed_func( Line, Module, Name, Arity, NewName ),
+                  {cons, Line, {var, Line, Var}, term_to_forms(Line, A)}] },
+    case Save of
+        true -> {match, Line, {var, Line, 'T'}, Call};
+        false -> Call
+    end.
 
-% T = M:F( {Module, Name, Args}, A ).
+%% @private
+%% @doc Like the previous function builds a runner function, but for the
+%%   Advice function of the form:
+%%               T = M:F( {Module, Name, Args}, A ).
 run_save_fun( Save, Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
     Call = {call, Line, mkapply( Line, M, F ),
                 [ build_proceed_func( Line, Module, Name, Arity, NewName ),
@@ -86,7 +238,9 @@ run_save_fun( Save, Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
         false -> Call
     end.
 
-% R = FuncName( P1, P2, ...),
+%% @private
+%% @doc Builds a running function definition:
+%%           R = FuncName( P1, P2, ... ),
 run_func( Line, FuncName, Arity ) ->
     {match, Line, {var, Line, 'R'},
                   {call, Line, mkatom( Line, FuncName ),
