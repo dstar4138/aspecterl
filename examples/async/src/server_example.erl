@@ -4,7 +4,7 @@
 % This is an Async Server which will only handle Casts, all other should 
 % error out. AspectErl will handle the missing features. This is explicit
 % so that readers of the code know how the implementation is handled.
--aspect( inject_missing ).
+-aspecterl( inject_missing ).
 -export( [init/1, handle_cast/2 ] ).
 
 %% Our State for this example is empty.

@@ -28,6 +28,7 @@ parse_transform( AST, Options ) ->
 parse( AST, Options ) ->
     NewAST = aspecterl_extractor:parse_transform( AST, Options ),
     {Nope, State} = check_options( NewAST, Options ),
+    NewerAST = update_if_missing( State, NewAST ),
     case Nope of
         true  -> 
             Module = State#aspect_pt.module,
@@ -188,4 +189,51 @@ check_verbosity( Options ) ->
 %% @hidden
 %% @doc Check if a option is apart of the option list.
 get_opt( Opt, Options ) -> lists:member( Opt, Options ).
-     
+
+
+%%% =========================================================================
+%%% Behaviour Exports checking
+%%% =========================================================================
+
+%% @hidden
+%% @doc Check if we need to inject missing behaviours, and if we do, go ahead
+%%   and do it. We need to first verify we have all the functions neccessary.
+%% @end
+update_if_missing(#aspect_pt{inject_missing=false}, AST) -> AST;
+update_if_missing(#aspect_pt{behaviours=Bhvs,exported=Expts}, AST ) ->
+    lists:foldl( fun( {Fun, Arity}, AltAST ) ->
+                         ast_wrapper:inject_error_fun( Fun, Arity, AltAST )
+                 end, AST, validate_missing( Bhvs, Expts )).
+
+%% @hidden
+%% @doc For each behaviour listed, check the export list to verify it's there.
+%%   We remove the export from the temp list so that we can cause errors if two
+%%   behaviours need the same name/arity function.
+%% @end %TODO: should this be changed to allow for multi-behaviour overloading?
+validate_missing( Behaviours, Exports ) -> 
+    validate_missing( Behaviours, Exports, [] ).
+validate_missing( [], _, M ) -> M;
+validate_missing( [B|R], Es, Ms) -> 
+    {Missing, NEs} =
+      lists:foldl( fun( Item, {Missing, Expts} ) ->
+                           case lists:member( Item, Expts ) of
+                               true -> {Missing, lists:delete(Item, Expts)};
+                               false -> {[Item|Missing], Expts}
+                           end
+                   end, {[], Es}, required_exports( B )),
+    validate_missing( R, NEs, Missing++Ms ).
+
+required_exports( application ) -> [ {start,2}, {stop,1} ];
+required_exports( supervisor  ) -> [{init,1}];
+required_exports( gen_server  ) -> [ {init,1}, {handle_call,3}, 
+                                     {handle_cast,2}, {handle_info,2},
+                                     {terminate,2}, {code_change,3} ];
+required_exports( gen_fsm ) -> [ {init,1}, {handle_event,3}, 
+                                 {handle_sync_event,4},{handle_info,3},
+                                 {terminate,3}, {code_change,4} ];
+required_exports( gen_event ) -> [ {init,1}, {handle_event,2},
+                                   {handle_call,2}, {handle_info,2},
+                                   {terminate,2}, {code_change,3} ];
+required_exports( _Unknown ) -> []. 
+    %TODO: Log? How can AspectErl support user defined behaviours?
+                                        
