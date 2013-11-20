@@ -205,7 +205,7 @@ final( OnFinal, {function, Line, Name, Arity, Clauses}, Module ) ->
     {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
 %% @doc Injects a function into the AST that just throws an error when called.
-inject_error_fun( Module, Fun, Arity, AST ) ->
+inject_error_fun( _Module, Fun, Arity, AST ) ->
     DUMMY_LINE = 9001,
     FakeFun = {function,DUMMY_LINE,Fun, Arity,
                 [{clause, DUMMY_LINE, argsdlist( Arity, DUMMY_LINE ), [],
