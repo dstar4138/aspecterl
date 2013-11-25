@@ -21,7 +21,7 @@
 
 parse_transform( AST, Options ) ->
     case ?AspectsOn of 
-        true -> parse( AST, Options );
+        true -> A = parse( AST, Options ), io:fwrite("AST=~p~n",[A]), A;
         false -> AST
     end.
 
@@ -118,20 +118,20 @@ test_pointcuts( Ps, F, State ) ->
 wrap_advice_list( _, [], Fun, Forms, Exports ) -> {Fun, Forms, Exports};
 wrap_advice_list( State, [A|Adv], Fun, Fs, E ) -> 
     % Assumes Original function is on top.
-    {ok, Es, [NewFun|NewForms]} = weave( A, Fun, State ),
+    {ok, Es, [NewFun|NewForms]} = weave( A, Fun, State, Fs ),
     inform(State, "AspectErl weaved: ~p~n with ~p~n",[fun_name(State, Fun), 
                                                       adv_name(A)]),
     wrap_advice_list( State, Adv, NewFun, NewForms++Fs, Es++E ).
 
 %% Weave single Advice into a single Erlang Form.
-weave( #advice{ type=T, module=M, name=F, args=A }, Forms, State ) ->
+weave( #advice{ type=T, module=M, name=F, args=A }, Forms, State, CurAcc ) ->
     Module = State#aspect_pt.module,
     case T of
-        'before'       -> ast_wrapper:before( {M,F,A}, Forms, Module );
-        'after_return' -> ast_wrapper:return( {M,F,A}, Forms, Module );
-        'after_throw'  -> ast_wrapper:onthrow( {M,F,A}, Forms, Module );
-        'after_final'  -> ast_wrapper:final( {M,F,A}, Forms, Module );
-        'around'       -> ast_wrapper:around( {M,F,A}, Forms, Module )
+        'before'       -> ast_wrapper:before( {M,F,A}, Forms, Module, CurAcc );
+        'after_return' -> ast_wrapper:return( {M,F,A}, Forms, Module, CurAcc );
+        'after_throw'  -> ast_wrapper:onthrow( {M,F,A}, Forms, Module, CurAcc );
+        'after_final'  -> ast_wrapper:final( {M,F,A}, Forms, Module, CurAcc );
+        'around'       -> ast_wrapper:around( {M,F,A}, Forms, Module, CurAcc )
     end.
 
 insert_exports( AST, Exports ) ->

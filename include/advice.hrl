@@ -11,7 +11,7 @@
         %% The following are internal use only:
         name :: atom(),        % The name of the advice function.
         module :: atom(),      % Module the advice function appears in.
-        args :: [term()]      % Parameters to pass to function.
+        args = []:: [term()]      % Parameters to pass to function.
 }).        
 %% Advice function spec:
 %%  fun_name( FuncCall, Args )

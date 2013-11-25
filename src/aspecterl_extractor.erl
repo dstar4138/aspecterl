@@ -121,8 +121,8 @@ check_pointcut_args( [], Pc ) ->
         false -> {error, "Pointcut definition does not contain a location check."}
     end;
 check_pointcut_args( [{V, Re}|R], Pc ) ->
-    case lists:member(V, [module, func, behaviour, arity]) of
-        true -> (case check_re( Re ) of
+    case lists:member(V, [module, func, behaviour, arity, scope]) of
+        true -> (case check_re( V, Re ) of
                      true -> check_pointcut_args( R, set_pc(Pc, V, Re) );
                      {error, Reason} -> {error, Reason}
                  end);
@@ -131,13 +131,20 @@ check_pointcut_args( [{V, Re}|R], Pc ) ->
 check_pointcut_args( [A|_], _ ) ->
     {error, io_lib:format("Invalid pointcut argument '~p'",[A])}.
 
-check_re( _ ) -> true.
+check_re( scope, R ) ->
+    case R of
+        'public' -> true;
+        'private' -> true;
+        'any' -> true;
+        _ -> false
+    end;
+check_re( _, _ ) -> true. %TODO: actually check the regular expression.
 
 set_pc( Pc, module, Re ) -> Pc#pointcut{module=Re};
 set_pc( Pc, func, Re ) -> Pc#pointcut{func=Re};
 set_pc( Pc, behaviour, Re ) -> Pc#pointcut{behaviour=Re};
-set_pc( Pc, arity, Re ) -> Pc#pointcut{arity=Re}.
-
+set_pc( Pc, arity, Re ) -> Pc#pointcut{arity=Re};
+set_pc( Pc, scope, Re ) -> Pc#pointcut{scope=Re}.
 
 
 %% @hidden

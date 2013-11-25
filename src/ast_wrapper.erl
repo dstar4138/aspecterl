@@ -27,7 +27,7 @@
 
 % Functions to wrap a function call in/around/after a function definition.
 % They all return: {ok, NewExports, NewForms}.
--export([ before/3, return/3, onthrow/3, final/3, around/3 ]).
+-export([ before/4, return/4, onthrow/4, final/4, around/4 ]).
 % Function for Injecting missing function based on behaviours.
 -export([ inject_error_fun/4 ]).
 
@@ -43,8 +43,8 @@
 %%     f_@( P1, P2, ... ).
 %% f_@( X, Y, ... ) -> ...stuff... 
 %%
-before( Before, {function, Line, Name, Arity, Clauses}, Module ) -> 
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+before( Before, {function, Line, Name, Arity, Clauses}, Module, AST ) -> 
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
     {function, Line, Name, Arity,
         [ % Arg List- pulled from clauses.
@@ -54,7 +54,7 @@ before( Before, {function, Line, Name, Arity, Clauses}, Module ) ->
                % Before( {Module, Name, Args, NewFunc}, BeforeArgs ),
                % R = NewFunc( P1, P2, ... ).
                run_save_fun( false, Line, Before, Module, Name, Arity, NewFunc ), 
-               run_func( Line, NewFunc, Arity )
+               run_func( false, Line, NewFunc, Arity )
             ]
           }
         ]
@@ -72,8 +72,8 @@ before( Before, {function, Line, Name, Arity, Clauses}, Module ) ->
 %% f( P1, P2, ... ) -> Around( {?MODULE, f, [P1,P2,..] f_@}, Args).
 %% f_@( X, Y, ... ) -> ...stuff...
 %%
-around( Around, {function, Line, Name, Arity, Clauses}, Module ) ->
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+around( Around, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
         {function, Line, Name, Arity, 
             [ % Arg List - Pulled from Clauses.
@@ -102,8 +102,8 @@ around( Around, {function, Line, Name, Arity, Clauses}, Module ) ->
 %%     R.
 %% f_@( X, Y, ... ) -> ...stuff..
 %%
-return( OnReturn, {function, Line, Name, Arity, Clauses}, Module ) -> 
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+return( OnReturn, {function, Line, Name, Arity, Clauses}, Module, AST ) -> 
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
         {function, Line, Name, Arity,
             [ %Arg List - Pulled from Clauses.
@@ -113,7 +113,7 @@ return( OnReturn, {function, Line, Name, Arity, Clauses}, Module ) ->
                   % R = M:F( A ),
                   % OnReturn( {Module, Name, Args, NewFunc}, [{return,R}|RetArgs] ),
                   % R.
-                  run_func( Line, NewFunc, Arity ),
+                  run_func( true, Line, NewFunc, Arity ),
                   run_save_fun_append( false, Line, OnReturn, Module, Name, Arity, NewFunc, 'R' ),
                   {var,Line,'R'}
                  ]
@@ -138,8 +138,8 @@ return( OnReturn, {function, Line, Name, Arity, Clauses}, Module ) ->
 %%     end.
 %% f_@( X, Y, ... ) -> ...stuff...
 %%
-onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module ) ->
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
         {function, Line, Name, Arity,
             [ %Arg List - Pulled from Clauses.
@@ -153,13 +153,23 @@ onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module ) ->
                   %              [{throw,Throw}|ThrowArgs])
                   % end
                   {'try',Line,
-                   [ run_func( Line, NewFunc, Arity ) ],
+                   [ run_func( false, Line, NewFunc, Arity ) ],
                    [],
-                   [ {clause, Line, [{var,Line,'Er'},{var, Line, 'Rz'}], [],
-                     [  {match, Line, {var, Line, 'Throw'}, {tuple, Line, [{var,Line,'Er'},{var,Line,'Rz'}]}},
+                   [ {clause, Line, 
+                      [{tuple, Line, [{var,Line,'Er'},
+                                      {var, Line, 'Rz'},
+                                      {var,Line,'_'}]}], 
+                      [],
+                      [ 
+                       {match, Line, {var, Line, 'Throw'},
+                                     {tuple, Line, [{atom, Line, 'throw'}, 
+                                                    {tuple, Line, [{var,Line,'Er'},
+                                                                  {var,Line,'Rz'}]}
+                                                   ]}},
                         run_save_fun_append( false, Line, OnThrow, Module, Name, Arity, NewFunc, 'Throw' ) 
-                     ]}
-                   ],[]}
+                        ]}
+                    ],
+                   []}
                  ]
                }
             ]
@@ -180,8 +190,8 @@ onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module ) ->
 %%     end.
 %% f_@( X, Y, ... ) -> ...stuff...
 %%
-final( OnFinal, {function, Line, Name, Arity, Clauses}, Module ) ->
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses ),
+final( OnFinal, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
+    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
         {function, Line, Name, Arity,
             [ %Arg List - Pulled from Clauses.
@@ -193,7 +203,7 @@ final( OnFinal, {function, Line, Name, Arity, Clauses}, Module ) ->
                   %     OnFinal( {Module, Name, Args, NewFunc}, FinArgs)
                   % end
                   {'try',Line,
-                   [ run_func( Line, NewFunc, Arity ) ],
+                   [ run_func( false, Line, NewFunc, Arity ) ],
                    [], [],
                    [ 
                       run_save_fun( false, Line, OnFinal, Module, Name, Arity, NewFunc )
@@ -259,20 +269,35 @@ run_save_fun( Save, Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
 %% @private
 %% @doc Builds a running function definition:
 %%           R = FuncName( P1, P2, ... ),
-run_func( Line, FuncName, Arity ) ->
-    {match, Line, {var, Line, 'R'},
-                  {call, Line, mkatom( Line, FuncName ),
-                               mklist( Line, argnames(Arity))}}.
+run_func( Save, Line, FuncName, Arity ) ->
+    Call = {call, Line, mkatom( Line, FuncName ),
+                        argslist(Arity, Line)},
+    case Save of
+        true -> {match, Line, {var, Line, 'R'}, Call};
+        false -> Call
+    end.
 
 
 %%% =========================================================================
 %%% Internal AST Manipulation
 %%% =========================================================================
 
-gen_mkfunc( Line, Name, Arity, Clauses ) ->
-    NewName = list_to_atom( atom_to_list(Name) ++ "_@" ), %TAGGED.
+gen_mkfunc( Line, Name, Arity, Clauses, AST ) ->
+    NewName = gen_newname( Name, Arity, AST ),
     Func = {function, Line, NewName, Arity, Clauses},
     {NewName, Func}.
+
+gen_newname( Name, Arity, AST ) ->
+    FirstCheck = list_to_atom( atom_to_list(Name) ++ "_@" ), 
+    check_name_loop( FirstCheck, Arity, AST ).
+check_name_loop( Name, Arity, AST ) ->
+    case parse_trans:function_exists( Name, Arity, AST ) of
+        true -> 
+            UpdatedName = list_to_atom( atom_to_list(Name) ++ "_@" ),
+            check_name_loop( UpdatedName, Arity, AST );
+        false -> Name
+    end.
+
 
 %% @hidden
 %% @doc Creates an argument list of a particular arity on a given line.
@@ -290,8 +315,6 @@ argsdlist( N, L, R ) -> argsdlist( N-1, L, [ {var,L,'_'} | R ] ).
 %%   at 1. We can generate lists of them for doing tuples or cons lists.
 %% @end
 argname( N ) -> list_to_atom("P" ++ integer_to_list(N)).
-argnames( 0 ) -> [];
-argnames( N ) -> argnames(N-1)++[argname(N)].
 
 %% @hidden
 %% @doc Creates an AST representation of a variable.
