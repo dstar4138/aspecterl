@@ -21,7 +21,7 @@
 
 parse_transform( AST, Options ) ->
     case ?AspectsOn of 
-        true -> A = parse( AST, Options ), io:fwrite("AST=~p~n",[A]), A;
+        true -> parse( AST, Options );
         false -> AST
     end.
 

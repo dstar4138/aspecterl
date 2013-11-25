@@ -13,3 +13,6 @@ that would be nice to finish up before calling this a finished project:
   to be more than just a half-baked idea.
 
 * Fix all the TODOs in the source code.
+
+* If two pointcuts are named the same in two different modules, they get applied
+  twice. Perhaps pointcuts should be modularized?
