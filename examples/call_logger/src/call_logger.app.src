@@ -1,0 +1,8 @@
+{application, call_logger,
+ [
+  {description, "AspectErl function logging to demo advice."},
+  {vsn, "0.0.1"},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {env, []}
+ ]}.
