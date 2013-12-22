@@ -29,9 +29,31 @@
 %%% User and System Callbacks.
 %%% =========================================================================
 
-compile( _Dir ) ->
-    ok. %TODO: Compile with ADF File.
+compile( Dirs ) when is_list(Dirs) ->
+    {S,A,E} = case Dirs of
+        [Adv] -> % Assumes from adv dir that ../src and ../ebin exist.
+            Src  = Adv++"../src",
+            Ebin = Adv++"../ebin",
+            {Src, Adv, Ebin};
+        [Src, Adv] -> % Assumes from src dir that src/../ebin exists.
+            Ebin = Src++"../ebin",
+            {Src, Adv, Ebin};
+        [Src, Adv, Ebin] -> {Src, Adv, Ebin};
+        _ -> io:fwrite("Uknown compile inputs, need 1-3 inputs.~n",[])
+    end,
+    compile( S, A, E ).
 
+compile( Src, Adv, Ebin ) ->
+    case verify( [Src, Adv, Ebin] ) of
+        false -> ok;
+        true ->
+            (case erladf:is_advice_dir( Adv ) of 
+                 true -> build( Adv, Src, Ebin );
+                 false -> 
+                     io:fwrite("Advice Dir(~p) does not contain an ADF file!",
+                               [Adv])
+             end)
+    end.
 
 %%% =========================================================================
 %%% Global Aspect Table Callbacks.
@@ -183,4 +205,65 @@ internal_get_advice( Module, Function ) ->
                 end, [], T ).
 check_adv( #advice{module=M, name=N}, Mod, Func ) ->
     N =:= Func andalso (Mod == nil orelse M =:= Mod).
+
+%% ==========================================================================
+%% Compilation Pipeline
+%% ==========================================================================
+
+%% @hidden
+%% @doc Check if all strings in list are actually valid directory paths.
+verify( [] ) -> true;
+verify( [H|R] ) ->
+    case filelib:is_dir( H ) of
+        true -> verify( R );
+        false -> 
+            io:fwrite("Invalid Directory: ~p~n",[H]),
+            false
+    end.
+
+%% @hidden
+%% @doc Pull out advice information from ADF files and update global table.
+%%   Then compile advice and source files so that we have BEAMs of everything.
+%% @end 
+build( AdviceDir, SourceDir, OutDir ) ->
+    {ok, {Adv,Pcs}} = erladf:parse_all( AdviceDir ),
+    aspecterl:update_global_table(Pcs, Adv),
+    compile_files( AdviceDir, OutDir, false),
+    compile_files( SourceDir, OutDir, true ).
+
+%% @hidden
+%% @doc Compile each file in Source Directory and place its BEAM in the output
+%%   Directory. If Inject is true, then run the aspecterl injector on the file.
+%% @end
+compile_files( SourceDir, OutDir, Inject ) ->
+   Erls = get_erl_files( SourceDir ),
+   Opts = [{outdir, OutDir}] ++
+            (if Inject -> [{parse_transform, aspecterl_injector}];
+                true   -> []
+             end),
+   ok = compile_each( Erls, Opts ).
+
+%% @hidden
+%% @doc Compile each file in a list with the given Options.
+compile_each( [], _ ) -> ok;
+compile_each( [File|Rest], Options ) ->
+    do_compile( File, Options ),
+    compile_each( Rest, Options ).
+
+%% @hidden
+%% @doc Compile a particular Erlang file with the given Options.
+do_compile( File, Options ) ->
+    case compile:file( File, Options ) of
+        {ok, _Module} -> ok;
+        {ok, _Module, Warnings} -> io:fwrite("Warnings: ~p~n",[Warnings]);
+        {ok, _Module, _Binary, Warns} -> io:fwrite("Warnings: ~p~n",[Warns]);
+        error -> io:fwrite("Unknown Error.~n",[]);
+        {error, Errors, Warnings} ->
+            io:fwrite("Errors: ~p~nWarnings: ~p~n",[Errors, Warnings])
+    end.
+
+%% @hidden
+%% @doc Grab all files with *.erl extension within a directory.
+get_erl_files( Dir ) ->
+    filelib:fold_files( Dir, "^.*\.erl$", false, fun(E,A)->[E|A] end, [] ).
 
