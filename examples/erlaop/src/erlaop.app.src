@@ -1,0 +1,9 @@
+{application, erlaop,
+ [
+  {description, "AspectErl erlaop ADF example"},
+  {vsn, "0.0.1"},
+  {registered, [ tester ]},
+  {applications, [kernel, stdlib]},
+  {mod, {tester,[]}},
+  {env, []}
+ ]}.

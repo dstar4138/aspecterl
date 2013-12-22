@@ -1,5 +1,7 @@
 REBAR=../../bin/rebar
 
+.PHONY: compile aspects_off clean distclean
+
 compile: deps
 	$(REBAR) update-deps compile
 
