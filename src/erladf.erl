@@ -19,10 +19,10 @@
 
 %%% Bindings to turn ADF files into our Pointcut/Advice record structures.
 -define( DEFAULT_BINDINGS, [
-    {'Aspect', fun( Adv, Pc ) -> #aspect{ advice=Adv, pointcuts=Pc } end},
     {'Advice', fun( Type, Module, Fun ) ->
                        #advice{ type=Type, module=Module ,name=Fun, args=[] }
                end},
+    {'Aspect', fun( Adv, Pc ) -> #aspect{ advice=Adv, pointcuts=Pc } end},
     {'Pointcut', fun( M, F, A, S, B ) -> 
                        #pointcut{ module=M, func=F, arity=A, 
                                   scope=S, behaviour=B }
@@ -48,7 +48,7 @@ is_advice_dir( DirPath ) ->
 -spec parse( file:name_all() ) -> {ok, term()} | {error, Reason :: any()}.
 parse( FilePath ) ->
     case file:script( FilePath, ?DEFAULT_BINDINGS ) of
-        {ok, Globals}   -> {ok, unwrap(Globals)};
+        {ok, Aspects}   -> {ok, Aspects};
         {error, Reason} -> {error, Reason}
     end.
 
@@ -63,8 +63,9 @@ parse_all( DirPath ) ->
         {ok, FileNames} -> 
             AdfFiles = get_adf_files( FileNames ),
             Gs = lists:foldl( fun( AdfFile , Globals ) -> 
-                                case parse( AdfFile ) of
-                                    {ok, G} -> [G|Globals];
+                                AdfFilePath = DirPath ++ "/" ++ AdfFile,
+                                case parse( AdfFilePath ) of
+                                    {ok, G} -> G++Globals;
                                     _ -> Globals
                                 end
                               end, [], AdfFiles ),
@@ -93,10 +94,17 @@ get_adf_files( [H|R] , A ) ->
 unwrap( Globals ) -> unwrap( Globals, {[], []} ).
 unwrap( [], A ) -> A;
 unwrap( [#aspect{ advice=A, pointcuts=P }|R], {Adv, Pcs} ) ->
+    {ALinked, Ps} = rename_pcts( P, A, [] ),
+    unwrap( R, {[ALinked|Adv], Ps++Pcs} ).
+
+%% @hidden
+%% @doc For each pointcut, name it and then link the advice to it.
+rename_pcts( [], A, Ps ) -> { A, Ps };
+rename_pcts( [P|R], A, Ps ) -> 
     Name = gen_global_name(P), 
     PNamed = P#pointcut{name=Name},
     ALinked = A#advice{pointcuts=[Name|A#advice.pointcuts]},
-    unwrap( R, { [ALinked|Adv], [PNamed|Pcs] } ).
+    rename_pcts( R, ALinked, [PNamed|Ps] ).
 
 %% @hidden
 %% @doc Returns a global name (hash) of the pointcut for advice lookup.

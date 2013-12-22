@@ -1,16 +1,16 @@
 %% Definitions of System Pointcuts.
 [
     Aspect(
-        Advice( before, myadvice, tickrun),
+        Advice( before, myadvice, tickrun ),
         [ 
-            Pointcut( "tester", "\\w*", "*". public )
+            Pointcut( "tester", "\\w*", "*", public, nil )
         ]
     ),
 
     Aspect(
         Advice( after_return, myadvice, finrun ),
         [
-            Pointcut( "tester", "\\w*", "*", private ) % Note private apply   
+            Pointcut( "tester", "\\w*", "*", private, nil ) % Note private apply   
         ]
     )
 ].
