@@ -138,7 +138,13 @@ check_re( scope, R ) ->
         'any' -> true;
         _ -> false
     end;
-check_re( _, _ ) -> true. %TODO: actually check the regular expression.
+check_re( _, "*") -> true;
+check_re( _, nil) -> true;
+check_re( _, R ) -> 
+    case re:compile( R ) of
+        {ok, _ } -> true;
+        {error, Reason} -> {error, Reason}
+    end.
 
 set_pc( Pc, module, Re ) -> Pc#pointcut{module=Re};
 set_pc( Pc, func, Re ) -> Pc#pointcut{func=Re};
