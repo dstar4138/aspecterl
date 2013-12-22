@@ -176,6 +176,7 @@ check_val( 'any', _ ) -> true;
 check_val( A, A ) -> true;
 check_val( _, _ ) -> false.
 
+check_mem( "*", _ ) -> true; %compatability with erlaop.
 check_mem( nil, _ ) -> true;
 check_mem( [], _ )  -> true;
 check_mem( L, M) when is_list(L) ->
