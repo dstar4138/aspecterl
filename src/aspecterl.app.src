@@ -1,6 +1,6 @@
 {application, aspecterl,
  [
   {description, "Aspect Oriented Programming toolkit for Erlang."},
-  {vsn, "0.0.1"},
+  {vsn, "0.5.1"},
   {applications, [kernel, stdlib, re]}
  ]}.
