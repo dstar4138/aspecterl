@@ -2,7 +2,7 @@
 %% game for aspect application.
 -module(tester).
 
--export([run/0, test1/2, test2/2]).
+-export([run/0, test1/2]).
 
 % Run two tests with constant values.
 run() -> test1( 42, 24 ), test2( [1,2,3,4], [] ).

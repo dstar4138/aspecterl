@@ -108,6 +108,6 @@ rename_pcts( [P|R], A, Ps ) ->
 
 %% @hidden
 %% @doc Returns a global name (hash) of the pointcut for advice lookup.
-gen_global_name( #pointcut{ module=M, func=F, arity=A } ) ->
-    {global, erlang:phash2( {M,F,A} ) }.
+gen_global_name( Pct ) ->
+    {global, erlang:phash2( Pct ) }.
 
