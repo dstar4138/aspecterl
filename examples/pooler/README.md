@@ -17,6 +17,9 @@ rebuilding.
 
 To build without aspects run: `make aspects_off`
 
+Note you will need to `make clean`, if you already made it with aspects on. 
+This is because rebar and Erlang will think nothing's changed and won't really
+compile anything.
 
 ### To Run ###
 
