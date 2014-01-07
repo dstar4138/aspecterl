@@ -10,3 +10,5 @@ that would be nice to finish up before calling this a finished project:
 
 * If two pointcuts are named the same in two different modules, they get applied
   twice. Perhaps pointcuts should be modularized?
+
+* A Rebar plugin to ease ADF compiles.

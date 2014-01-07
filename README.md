@@ -54,14 +54,10 @@ tell Rebar to compile them first:
 
 If you want to use the ADF configuration files method (similar to AspectJ 
 Schema-based config files) you will need to specify a separate directory where 
-AspectErl will find your advice. You can do this in Rebar's configuration file:
-
-```
-{erl_opts, [ {aspecterl_adf_dir, "perf/advice" } ]}.
-
-```
-
-
+AspectErl will find your advice. Currently ADF compilation needs a secondary
+step (which in the erlaop example facilitates with a Makefile step). One of my 
+todos is a rebar plugin which will remove this requirement.
+ 
 ## License ##
 
 AspectErl got hints from
