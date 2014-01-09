@@ -8,17 +8,13 @@
 -include("defs.hrl").
 -include("advice.hrl").
 
+-import( aspecterl_util, [ inform/3, check_options/2 ] ).
+
 -export([parse_transform/2]).
 
--record( aspect_pt, {
-    file, 
-    module,
-    behaviours = [],
-    inject_missing = false,
-    exported = [],
-    verbose = false
-}).
-
+%% @doc Loops through the Abstract Syntax Tree and injects the advice based on
+%%   pointcuts and decoration attributes. 
+%% @end
 parse_transform( AST, Options ) ->
     case ?AspectsOn of 
         true -> parse( AST, Options );
@@ -26,31 +22,30 @@ parse_transform( AST, Options ) ->
     end.
 
 parse( AST, Options ) ->
-    NewAST = aspecterl_extractor:parse_transform( AST, Options ),
-    {Nope, State} = check_options( NewAST, Options ),
+    NewAST = aspecterl_extractor:parse_transform( AST, Options ),%% XXX: CLEAN ME 
+    {_, Extracted, State} = check_options( NewAST, Options ),
     NewerAST = update_if_missing( State, NewAST ),
-    case Nope of
+    case Extracted of
         true  -> 
             Module = State#aspect_pt.module,
             inform(State, "Ignoring file in injector => ~p\n",[Module]), 
             NewerAST;
-        false -> 
-            FinalAST = injector( NewerAST, State ),
-            case FinalAST of 
-                NewerAST -> inform(State,"Nothing Weaved in ~p.~n",[
-                                                      State#aspect_pt.module]);
-                _DifAST-> inform(State,"Final Weaving = ~p~n",[FinalAST])
-            end,
-            FinalAST
+        false -> injector( NewerAST, State )
     end.
 
 injector( AST, State ) ->
    case funloop( AST, State, [], [] ) of
-       {ok, NewAST} -> NewAST;
+       {ok, AST} -> 
+           inform(State, "Nothing Weaved in ~p.~n",
+                         [State#aspect_pt.module]),
+           AST;
+       {ok, NewAST} -> 
+           inform(State,"Final Weaving = ~p~n",[NewAST]),
+           NewAST;
        Error -> Error
     end.
 
-% Loop over AST pulling out functions and checking them
+%% @doc Loop over AST pulling out functions and checking them
 funloop( [], _, Acc, E ) -> 
     AST = lists:reverse(Acc),
     NewAST = insert_exports( AST, E ),
@@ -143,54 +138,6 @@ fun_name( #aspect_pt{module=M},
           {function, _line, Name, _Arity, _Clauses} ) -> {M, Name}.
 adv_name( #advice{ module = Module, name = Name } ) -> {Module, Name}.
 
-
-%%% =========================================================================
-%%% Option Parsing
-%%% =========================================================================
-%%% TODO: Move to utility module for both transformers.
-
-%% @hidden
-%% @doc Verbosely display information about current transformations.
-%inform( #aspect_pt{verbose=true}, Msg, Args ) -> io:format( Msg, Args );
-inform( #aspect_pt{verbose=rebar}, Msg, Args ) -> 
-    rebar_log:log( debug, Msg, Args );
-inform( _, _, _ ) -> ok.   
-
-%% @hidden
-%% @doc Default to rebar verbosity/debug level, otherwise look at applied
-%%   compiler flags. This will build the default state for the parse
-%%   transformer.
-%% @end
-check_options( AST, Options ) ->
-    Attr       = [ Args || {attribute, _, ?AspectErlAttr, Args} <- AST],
-    Behaviours = [B || {attribute, _, behaviour, B} <- AST],
-    Exported   = [E || {attribute, _, export, EL} <- AST, E <- EL],
-    Nope = lists:member(exclude, lists:flatten(Attr)),
-    State = #aspect_pt{ 
-        file = parse_trans:get_file( AST ),
-        module = parse_trans:get_module( AST ),
-        behaviours = Behaviours,
-        inject_missing=lists:member(inject_missing, lists:flatten(Attr)),
-        exported = Exported,
-        verbose = check_verbosity( Options ) 
-    },
-    {Nope, State}.
-
-%% @hidden 
-%% @doc Check compile flags for verbosity. See check_options/1. Defaults to 
-%%      rebar's value.
-%% @end
-check_verbosity( Options ) ->
-    case application:get_env( rebar_global, verbose ) of
-        undefined -> get_opt( verbose, Options );
-        {ok, _ }  -> rebar
-    end.
-
-%% @hidden
-%% @doc Check if a option is apart of the option list.
-get_opt( Opt, Options ) -> lists:member( Opt, Options ).
-
-
 %%% =========================================================================
 %%% Behaviour Exports checking
 %%% =========================================================================
@@ -211,7 +158,8 @@ update_if_missing(#aspect_pt{module=Module,behaviours=Bhvs,exported=Expts}, AST 
 %%   behaviours need the same name/arity function.
 %% @end %TODO: should this be changed to allow for multi-behaviour overloading?
 validate_missing( Behaviours, Exports ) -> 
-    io:fwrite("Checking behaviours(~p) for missing exports in (~p)~n",[Behaviours, Exports]),
+    io:fwrite("Checking behaviours(~p) for missing exports in (~p)~n",
+              [Behaviours, Exports]),
     validate_missing( Behaviours, Exports, [] ).
 validate_missing( [], _, M ) -> 
     io:fwrite("Found Missing functions, now injecting: ~p~n",[M]),
@@ -226,6 +174,9 @@ validate_missing( [B|R], Es, Ms) ->
                    end, {[], Es}, required_exports( B )),
     validate_missing( R, NEs, Missing++Ms ).
 
+
+%% @hidden
+%% @doc Check for the exports required by each behaviour. 
 required_exports( application ) -> [ {start,2}, {stop,1} ];
 required_exports( supervisor  ) -> [{init,1}];
 required_exports( gen_server  ) -> [ {init,1}, {handle_call,3}, 
@@ -238,5 +189,4 @@ required_exports( gen_event ) -> [ {init,1}, {handle_event,2},
                                    {handle_call,2}, {handle_info,2},
                                    {terminate,2}, {code_change,3} ];
 required_exports( _Unknown ) -> []. 
-    %TODO: Log? How can AspectErl support user defined behaviours?
-                                        
+

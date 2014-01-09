@@ -2,8 +2,9 @@
 %%
 %%  This is the module which gets inserted into the pre-processor to strip out
 %%  annotations for advice and pointcuts so that weeving can take place. This
-%%  merely updates the global pointcut and advice tables so that the AspectErl
-%%  advice injector (aspecterl.erl) has advice to inject.
+%%  merely updates the global pointcut and advice tables (aspecterl.erl) so 
+%%  that the AspectErl advice injector (aspecterl_injector.erl) has advice to 
+%%  inject.
 %%
 %%  @author Alexander Dean
 -module(aspecterl_extractor).
@@ -11,20 +12,10 @@
 -include("advice.hrl").
 -include("pointcut.hrl").
 
+-import( aspecterl_util, [ inform/3, check_options/2 ] ).
+
 % The Compile-time hook function. See include/aspect.hrl for more information.
 -export([parse_transform/2]).
-
-% Transformation State, this is built from the compile options as well as 
-% environment settings for the aspect application.
--record( aspect_pt, {
-           file, module, % File attributes for the current file we are on. 
-           pct = [], % The pointcut table, for weeve calls look-ups
-           adv = [], % Advice List, either from advice files or ADF configs.
-           %% Compiler Settings %%
-           verbose = false % Should we print warnings, such as unused advice?
-           %,debug = false % Should the compiler explain where advice is applied?
-           %% .. TODO: what other compiler flags can we work with?
-}).
 
 %% @doc Loops through the Abstract Syntax Tree and extracts the portions of
 %% interest then injects advice code where it's needed.
@@ -36,13 +27,13 @@ parse_transform( AST, Options ) ->
     end.
 
 parse( AST, Options ) ->
-    {HasAdvice, State} = check_options( AST, Options ), 
+    {HasAdvice, _, State} = check_options( AST, Options ), 
     case HasAdvice of
         true -> 
             {NewAST, PCts} = extract_pointcuts( AST, State ),
             {FinalAST, Adv} = extract_advice( NewAST, State ),
-            NewState = update_advice( State, PCts, Adv ),
-            ok = update_global_table( NewState ),
+            NewState = State#aspect_pt{ pct=PCts, adv=Adv },
+            update_global_table( NewState ),
             FinalAST;
         false -> AST
     end.
@@ -53,8 +44,8 @@ parse( AST, Options ) ->
 
 %% @private
 %% @doc Take in the initial state after parsing options, and run through the
-%%   AST to retrieve all PointCuts and Advice. This will delete the attributes
-%%   it recognizes as it goes.
+%%   AST to retrieve all PointCuts. This will delete the attributes it 
+%%   recognizes as it goes.
 %% @end
 extract_pointcuts( AST, State ) -> epts( AST, State, {[],[]} ).
 epts( [], _, {RevAST, PCts} ) -> {lists:reverse( RevAST ), PCts};
@@ -73,7 +64,11 @@ epts( [{attribute, Line, pointcut, Args}|R], S, {A,P} ) ->
             epts( R, S, {[Err|A], P} )
     end;
 epts( [H|R], State, {AST, P} ) -> epts( R, State, {[H|AST], P} ).
-                
+     
+%% @hidden
+%% @doc Takes the AST spit out from extract_pointcuts/2 and finds all Advice.
+%%   This will delete the attributes it recognizes as it goes.
+%% @end   
 extract_advice( AST, State ) -> eadv( AST, State, {[],[]} ).
 eadv( [], _, {RevAST, Adv} ) -> {lists:reverse(RevAST), Adv};
 eadv( [{attribute, ALine, advice, Args},N|R], State, {AST,Adv} ) -> 
@@ -91,16 +86,16 @@ eadv( [H|R], State, {AST, Adv} ) -> eadv( R, State, {[H|AST], Adv} ).
 %%% Internal Functionality
 %%% =========================================================================
 
-update_advice( State, Pcs, Adv ) ->
-    %TODO: Check for conflicting pointcuts/advice?
-    State#aspect_pt{pct=Pcs, adv=Adv}.
-
-
-update_global_table( #aspect_pt{ pct=Pct, adv=Adv } ) ->
+%% @hidden
+%% @doc Sends a message to a running server so as to keep track of the 
+%%   pointcuts and advice found in this file.
+%% @end
+update_global_table( #aspect_pt{ pct=Pct, adv=Adv } = State ) ->
     aspecterl:update_global_table( Pct, Adv ),
-    ok. %TODO: Inform? debugging?
+    inform( State, "Updated global table", [] ).
 
-
+%% @hidden 
+%% @doc Creates a pointcut object from an attribute found on a particular line.
 create_pointcut( Line, Name, Checks, S ) ->
     inform( S, "Found pointcut ~p: ~p", [Name, Checks] ),
     case check_pointcut_args( Checks, #pointcut{} ) of
@@ -131,6 +126,10 @@ check_pointcut_args( [{V, Re}|R], Pc ) ->
 check_pointcut_args( [A|_], _ ) ->
     {error, io_lib:format("Invalid pointcut argument '~p'",[A])}.
 
+%% @hidden
+%% @doc Utility function for testing regular expressions for each pointcut
+%%   matcher name. Only 'scope' has particular restrictions.
+%% @end  
 check_re( scope, R ) ->
     case R of
         'public' -> true;
@@ -146,12 +145,13 @@ check_re( _, R ) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%% @hidden
+%% @doc Utility function for updating members of the pointcut class. 
 set_pc( Pc, module, Re ) -> Pc#pointcut{module=Re};
 set_pc( Pc, func, Re ) -> Pc#pointcut{func=Re};
 set_pc( Pc, behaviour, Re ) -> Pc#pointcut{behaviour=Re};
 set_pc( Pc, arity, Re ) -> Pc#pointcut{arity=Re};
 set_pc( Pc, scope, Re ) -> Pc#pointcut{scope=Re}.
-
 
 %% @hidden
 %% @doc Checks if a Form is a function definition or not. Then checks if it is
@@ -209,40 +209,3 @@ check_advice_args( [{args, Args}|R], A ) ->
 check_advice_args( [ Bad | _], _ ) ->
     {error, io_lib:format("Unknown argument '~p' to advice.",[Bad])}.
 
-
-%% @hidden
-%% @doc Verbosely display information about current transformations.
-inform( #aspect_pt{verbose=true}, Msg, Args ) -> io:format( Msg, Args );
-inform( #aspect_pt{verbose=rebar}, Msg, Args ) -> 
-    rebar_log:log( debug, Msg, Args );
-inform( _, _, _ ) -> ok.   
-
-%% @hidden
-%% @doc Default to rebar verbosity/debug level, otherwise look at applied
-%%   compiler flags. This will build the default state for the parse
-%%   transformer.
-%% @end
-check_options( AST, Options ) ->
-    Attr = [Args || {attribute, _, ?AspectErlAttr, Args} <- AST],
-    HasAdvice = lists:member(advice_file, lists:flatten( Attr ) ),
-    State = #aspect_pt{ 
-        file = parse_trans:get_file( AST ),
-        module = parse_trans:get_module( AST ),
-        verbose = check_verbosity( Options ) 
-    },
-    {HasAdvice, State}.
-
-%% @hidden 
-%% @doc Check compile flags for verbosity. See check_options/1. Defaults to 
-%%      rebar's value.
-%% @end
-check_verbosity( Options ) ->
-    case application:get_env( rebar_global, verbose ) of
-        undefined -> get_opt( verbose, Options );
-        {ok, _ }  -> rebar
-    end.
-
-%% @hidden
-%% @doc Check if a option is apart of the option list.
-get_opt( Opt, Options ) -> lists:member( Opt, Options ).
-         
