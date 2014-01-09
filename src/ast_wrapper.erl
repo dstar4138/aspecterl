@@ -25,26 +25,38 @@
 %% @author Alexander Dean
 -module(ast_wrapper).
 
+% If Testing, then make sure all functions are exported for individual tests.
+-ifdef(EUNIT).
+-compile([debug_info, export_all]).
+-endif.
+
 % Functions to wrap a function call in/around/after a function definition.
 % They all return: {ok, NewExports, NewForms}.
 -export([ before/4, return/4, onthrow/4, final/4, around/4 ]).
 % Function for Injecting missing function based on behaviours.
 -export([ inject_error_fun/4 ]).
 
-%% Modifies the Function forms passed in so that it calls the the Fun before
-%% each clause of the Function definition. In otherwords It converts:
+% Defaults for injected error functions
+-define(DUMMY_LINE, 9001).
+-define(INJECT_ERROR, "AspectErl Injected function (~p:~p/~p) called!").
+
+%% @doc
+%%   Modifies the Function forms passed in so that it calls the the Fun before
+%%   each clause of the Function definition. In otherwords It converts:
+%%   
+%%   ``` f( X, Y, ... ) -> ...stuff... '''
 %%
-%% f( X, Y, ... ) -> ...stuff...
-%% 
-%% to
+%%   to
 %%
-%% f( P1, P2, ... ) -> 
-%%     Before( {?MODULE, f, [P1,P2,...], f_@}, Args), 
-%%     f_@( P1, P2, ... ).
-%% f_@( X, Y, ... ) -> ...stuff... 
-%%
+%%   ``` 
+%%   f( P1, P2, ... ) -> 
+%%       Before( {?MODULE, f, [P1,P2,...], f_@}, Args), 
+%%       f_@( P1, P2, ... ).
+%%   f_@( X, Y, ... ) -> ...stuff... 
+%%   '''
+%% @end
 before( Before, {function, Line, Name, Arity, Clauses}, Module, AST ) -> 
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
+    {NewFun, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
     {function, Line, Name, Arity,
         [ % Arg List- pulled from clauses.
@@ -53,27 +65,30 @@ before( Before, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
             [  
                % Before( {Module, Name, Args, NewFunc}, BeforeArgs ),
                % R = NewFunc( P1, P2, ... ).
-               run_save_fun( false, Line, Before, Module, Name, Arity, NewFunc ), 
-               run_func( false, Line, NewFunc, Arity )
+               run_save_fun( false, Line, Before, Module, Name, Arity, NewFun ), 
+               run_func( false, Line, NewFun, Arity )
             ]
           }
         ]
     },
-    {ok, [{NewFunc,Arity}],
+    {ok, [{NewFun,Arity}],
          [NewFunction, RenamedFunc]}.
 
-%% Modifies the Function forms passed in so that it calls the Fun instead.
-%% It is up to the Around Function to call the ?proceed() macro. It converts:
+%% @doc
+%%   Modifies the Function forms passed in so that it calls the Fun instead.
+%%   It is up to the Around Function to call the ?proceed() macro. It converts:
 %%
-%% f( X, Y, ... ) -> ...stuff...
+%%   ``` f( X, Y, ... ) -> ...stuff... '''
 %%
-%% to
+%%   to
 %%
-%% f( P1, P2, ... ) -> Around( {?MODULE, f, [P1,P2,..] f_@}, Args).
-%% f_@( X, Y, ... ) -> ...stuff...
-%%
+%%   ```
+%%    f( P1, P2, ... ) -> Around( {?MODULE, f, [P1,P2,..] f_@}, Args).
+%%    f_@( X, Y, ... ) -> ...stuff...
+%%   '''
+%% @end
 around( Around, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
-    {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
+    {NewFun, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
         {function, Line, Name, Arity, 
             [ % Arg List - Pulled from Clauses.
@@ -81,27 +96,30 @@ around( Around, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
                [],
                [
                 % Around( {Module, Name, Args, NewFunc}, AroundArgs ).
-                run_save_fun( false, Line, Around, Module, Name, Arity, NewFunc )
+                run_save_fun( false, Line, Around, Module, Name, Arity, NewFun )
                 ]
               }
             ]
         },
-    {ok, [{NewFunc, Arity}], [NewFunction, RenamedFunc]}.
+    {ok, [{NewFun, Arity}], [NewFunction, RenamedFunc]}.
 
-%% Modifies the Function forms passed in so that it calls Fun after the original
-%% function finishes. The result of the old function is weaved around Funs
-%% execution and returned. It converts:
+%% @doc
+%%   Modifies the Function forms passed in so that it calls Fun after the
+%%   original function finishes. The result of the old function is weaved around 
+%%   Funs execution and returned. It converts:
 %%
-%% f( X, Y, ... ) -> ...stuff...
+%%   ``` f( X, Y, ... ) -> ...stuff... '''
 %%
-%% to
+%%   to
 %%
-%% f( P1, P2, ... ) -> 
-%%     R = f_@( P1, P2, ... ),
-%%     OnReturn( {?MODULE, f, [P1,P2,...], f_@}, [{return,R}|Args] ),
-%%     R.
-%% f_@( X, Y, ... ) -> ...stuff..
-%%
+%%   ```
+%%    f( P1, P2, ... ) -> 
+%%       R = f_@( P1, P2, ... ),
+%%       OnReturn( {?MODULE, f, [P1,P2,...], f_@}, [{return,R}|Args] ),
+%%       R.
+%%    f_@( X, Y, ... ) -> ...stuff..
+%%   '''
+%% @end
 return( OnReturn, {function, Line, Name, Arity, Clauses}, Module, AST ) -> 
     {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
@@ -111,10 +129,11 @@ return( OnReturn, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
                  [],
                  [
                   % R = M:F( A ),
-                  % OnReturn( {Module, Name, Args, NewFunc}, [{return,R}|RetArgs] ),
+                  % OnReturn( {Module,Name,Args,NewFun}, [{return,R}|RetArgs] ),
                   % R.
                   run_func( true, Line, NewFunc, Arity ),
-                  run_save_fun_append( false, Line, OnReturn, Module, Name, Arity, NewFunc, 'R' ),
+                  run_save_fun_append( false, Line, OnReturn, Module, Name, 
+                                                          Arity, NewFunc, 'R' ),
                   {var,Line,'R'}
                  ]
                }
@@ -122,22 +141,25 @@ return( OnReturn, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
         },
     {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
-%% Modifies the Function forms passed in so that it calls Fun only if the 
-%% original function throws an exception. The exception data will be passed
-%% to the advice function via the Args. It converts:
+%% @doc
+%%   Modifies the Function forms passed in so that it calls Fun only if the 
+%%   original function throws an exception. The exception data will be passed
+%%   to the advice function via the Args. It converts:
 %%
-%% f( X, Y, ... ) -> ...stuff...
+%%   ``` f( X, Y, ... ) -> ...stuff... '''
 %%
-%% to
+%%   to
 %%
-%% f( P1, P2, ... ) ->
-%%     try f_@( P1, P2, ... )
-%%     catch Er:Rz ->
+%%   ```
+%%    f( P1, P2, ... ) ->
+%%      try f_@( P1, P2, ... )
+%%      catch Er:Rz ->
 %%         Throw = {Er,Rz}
 %%         OnThrow( {?MODULE, f, [P1,P2,...], f_@}, [{throw,Throw}|ThrowArgs])
-%%     end.
-%% f_@( X, Y, ... ) -> ...stuff...
-%%
+%%      end.
+%%    f_@( X, Y, ... ) -> ...stuff...
+%%  '''
+%% @end 
 onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
     {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
@@ -163,10 +185,12 @@ onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
                       [ 
                        {match, Line, {var, Line, 'Throw'},
                                      {tuple, Line, [{atom, Line, 'throw'}, 
-                                                    {tuple, Line, [{var,Line,'Er'},
-                                                                  {var,Line,'Rz'}]}
+                                                    {tuple, Line, 
+                                                        [{var,Line,'Er'},
+                                                         {var,Line,'Rz'}]}
                                                    ]}},
-                        run_save_fun_append( false, Line, OnThrow, Module, Name, Arity, NewFunc, 'Throw' ) 
+                        run_save_fun_append( false, Line, OnThrow, Module, Name, 
+                                                       Arity, NewFunc, 'Throw' ) 
                         ]}
                     ],
                    []}
@@ -176,20 +200,23 @@ onthrow( OnThrow, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
         },
     {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
-%% Modifies the Function forms passed in so that it calls Fun at the end of the
-%% function even if an exception is thrown. This advice does not get access to
-%% the exception. It converts:
+%% @doc
+%%   Modifies the Function forms passed in so that it calls Fun at the end of
+%%   the function even if an exception is thrown. This advice does not get 
+%%   access to the exception. It converts:
 %%
-%% f( X, Y, ... ) -> ...stuff...
+%%   ``` f( X, Y, ... ) -> ...stuff... '''
 %%
-%% to
-%%
-%% f( P1, P2, ... ) -> 
-%%     try f_@( P1, P2, ... )
-%%     after OnFinal( {?MODULE, f, [P1,P2,...], f_@}, FinArgs )
-%%     end.
-%% f_@( X, Y, ... ) -> ...stuff...
-%%
+%%   to
+%%   
+%%   ```
+%%     f( P1, P2, ... ) -> 
+%%        try f_@( P1, P2, ... )
+%%        after OnFinal( {?MODULE, f, [P1,P2,...], f_@}, FinArgs )
+%%        end.
+%%     f_@( X, Y, ... ) -> ...stuff...
+%%   '''   
+%% @end
 final( OnFinal, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
     {NewFunc, RenamedFunc} = gen_mkfunc( Line, Name, Arity, Clauses, AST ),
     NewFunction = 
@@ -206,7 +233,8 @@ final( OnFinal, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
                    [ run_func( false, Line, NewFunc, Arity ) ],
                    [], [],
                    [ 
-                      run_save_fun( false, Line, OnFinal, Module, Name, Arity, NewFunc )
+                      run_save_fun( false, Line, OnFinal, Module, 
+                                                Name, Arity, NewFunc )
                    ]}
                  ]
                }
@@ -215,17 +243,14 @@ final( OnFinal, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
     {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
 %% @doc Injects a function into the AST that just throws an error when called.
-inject_error_fun( _Module, Fun, Arity, AST ) ->
-    DUMMY_LINE = 9001,
-    FakeFun = {function,DUMMY_LINE,Fun, Arity,
-                [{clause, DUMMY_LINE, argsdlist( Arity, DUMMY_LINE ), [],
-                   [{call, DUMMY_LINE, {atom, DUMMY_LINE, error},
-                       [{string,DUMMY_LINE,"AspectErl Injected function called!"}]}]}]},
-%                      [{call, DUMMY_LINE, {remote, DUMMY_LINE, {atom, DUMMY_LINE, io_lib}, {atom,DUMMY_LINE,format}},
-%                                [ {string, DUMMY_LINE, "AspectErl Injected function called ~p:~p/~p~n"},
-%                                  mklist(DUMMY_LINE, [Module, Fun, Arity] ) ]}]}]}]},
-    NewAST = lists:reverse([FakeFun|lists:reverse(AST)]), %insert below.
-    parse_trans:export_function( Fun, Arity, NewAST ).
+inject_error_fun( Module, Fun, Arity, AST ) ->
+    ErrorMsg = io_lib:format(?INJECT_ERROR, [Module, Fun, Arity]),
+    FakeFun = {function, ?DUMMY_LINE, Fun, Arity,
+                [{clause, ?DUMMY_LINE, argsdlist( Arity, ?DUMMY_LINE ), [],
+                   [{call, ?DUMMY_LINE, {atom, ?DUMMY_LINE, error},
+                       [{string, ?DUMMY_LINE, ErrorMsg}]}]}]},
+    NewAST = AST ++ [ FakeFun ], % insert below.
+    parse_trans:export_function( Fun, Arity, NewAST ). % Add as an export.
 
 
 %%% =========================================================================
@@ -244,6 +269,7 @@ build_proceed_func( Line, Module, Name, Arity, NewFunc ) ->
 %% @doc Like the next function builds a runner function, but for the Advice
 %%   function of the form:
 %%              T = M:F( {Module, Name, Args}, [V|A] ).
+%% @end
 run_save_fun_append( Save, Line, {M,F,A}, Module, Name, Arity, NewName, Var ) ->
     Call = {call, Line, mkapply( Line, M, F ),
                 [ build_proceed_func( Line, Module, Name, Arity, NewName ),
@@ -257,6 +283,7 @@ run_save_fun_append( Save, Line, {M,F,A}, Module, Name, Arity, NewName, Var ) ->
 %% @doc Like the previous function builds a runner function, but for the
 %%   Advice function of the form:
 %%               T = M:F( {Module, Name, Args}, A ).
+%% @end
 run_save_fun( Save, Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
     Call = {call, Line, mkapply( Line, M, F ),
                 [ build_proceed_func( Line, Module, Name, Arity, NewName ),
@@ -269,6 +296,7 @@ run_save_fun( Save, Line, {M,F,A}=_Before, Module, Name, Arity, NewName ) ->
 %% @private
 %% @doc Builds a running function definition:
 %%           R = FuncName( P1, P2, ... ),
+%% @end
 run_func( Save, Line, FuncName, Arity ) ->
     Call = {call, Line, mkatom( Line, FuncName ),
                         argslist(Arity, Line)},
@@ -279,25 +307,28 @@ run_func( Save, Line, FuncName, Arity ) ->
 
 
 %%% =========================================================================
-%%% Internal AST Manipulation
+%%% Utility Functions
 %%% =========================================================================
 
+%% @hidden
+%% @doc Generates a new function Abstract Form given all of the pieces and the
+%%   AST it's going into (so it can check if the name it needs to generate is
+%%   already taken or not).
+%% @end   
 gen_mkfunc( Line, Name, Arity, Clauses, AST ) ->
     NewName = gen_newname( Name, Arity, AST ),
     Func = {function, Line, NewName, Arity, Clauses},
     {NewName, Func}.
 
+%% @hidden
+%% @doc Generates a new function name by appending a tag to the end of the name
+%%   repeatedly until it doesnt exist.
 gen_newname( Name, Arity, AST ) ->
-    FirstCheck = list_to_atom( atom_to_list(Name) ++ "_@" ), 
-    check_name_loop( FirstCheck, Arity, AST ).
-check_name_loop( Name, Arity, AST ) ->
-    case parse_trans:function_exists( Name, Arity, AST ) of
-        true -> 
-            UpdatedName = list_to_atom( atom_to_list(Name) ++ "_@" ),
-            check_name_loop( UpdatedName, Arity, AST );
-        false -> Name
+    UpdatedName = list_to_atom( atom_to_list(Name) ++ "_@" ),
+    case parse_trans:function_exists( UpdatedName, Arity, AST ) of
+        true  -> gen_newname( UpdatedName, Arity, AST );
+        false -> UpdatedName
     end.
-
 
 %% @hidden
 %% @doc Creates an argument list of a particular arity on a given line.
@@ -305,10 +336,11 @@ argslist( N, L ) -> argslist( N, L, [] ).
 argslist( 0, _, R ) -> R;
 argslist( N, L, R ) -> argslist( N-1, L, [ mkvar( L, N ) | R ] ).
 
+%% @hidden
+%% @doc Creates an argument list like argslist/3 but uses ignores, '_'.
 argsdlist( N, L ) -> argsdlist( N, L, [] ).
 argsdlist( 0, _, R ) -> R;
 argsdlist( N, L, R ) -> argsdlist( N-1, L, [ {var,L,'_'} | R ] ).
-
 
 %% @hidden
 %% @doc Our temporary Parameters are called P# where # is its position starting 
@@ -338,7 +370,6 @@ mktuple( Line, L ) -> {tuple, Line, L}.
 %% @doc Creates an function application AST.
 mkapply( Line, M, F ) -> {remote, Line, {atom, Line, M},{atom, Line, F}}.
 
-
 %% @hidden
 %% @doc Create an AST representation out of an erlang Term.
 term_to_forms( Line, Term ) ->
@@ -346,7 +377,7 @@ term_to_forms( Line, Term ) ->
         erl_syntax:revert(erl_syntax:abstract(Term))).
 
 %% @hidden
-%% @doc replace the Line Number in the AST.
+%% @doc Replace the Line Number in the AST.
 update_lineno( L, T) -> ul(L,T).
 ul( L, {cons, _, A,B} ) -> {cons, L, ul(L,A), ul(L,B)};
 ul( L, {nil, _} )      -> {nil,L};
