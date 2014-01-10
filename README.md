@@ -17,7 +17,9 @@ process pools without explicitly modifying the source code.
 AspectErl extends [ErlAOP](http://erlaop.sourceforge.net/) in that it provides 
 an
 [Annotation API](https://github.com/dstar4138/aspecterl/wiki/Annotation-API) 
-and rebar support on top of supporting their ADF configuration file syntax. 
+and rebar support on top of supporting their 
+[ADF configuration file](https://github.com/dstar4138/aspecterl/wiki/Advice-Definition-Files)
+syntax. 
 
 AspectErl also adds more capability for selecting modules and functions using 
 pointcuts by adding behaviour checking. In otherwords, you can inject code into
