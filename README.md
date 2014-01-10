@@ -39,7 +39,7 @@ add the injector as a compiler option:
     {aspecterl, ".*", {git, "git://github.com/dstar4138/aspecterl"}}
 ]}.
 
-{erl_opts, [ {parse_transform, aspecterl_injector} ]}.
+{erl_opts, [ {parse_transform, aspecterl} ]}.
 
 ```
 

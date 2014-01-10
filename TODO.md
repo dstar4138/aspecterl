@@ -1,14 +1,14 @@
 ## TODO ##
 
-While the primary purpose of AspectErl is finished, there are a few things 
-that would be nice to finish up before calling this a finished project:
+While the primary purpose of AspectErl is finished, there are a few things
+that would be nice to add:
 
-* Documentation. I would like to clean up the code and document it so it serves
-  to be more than just a half-baked idea.
+* Mockup injection - Replacing the `inject_missing` with a mock-up repo, which
+  would allow for a more general injection mechanism.
 
-* Fix all the TODOs in the source code.
-
-* If two pointcuts are named the same in two different modules, they get applied
-  twice. Perhaps pointcuts should be modularized?
+* Inlining - Right now nothing is optimized, it would be interesting to see if
+  optimizations can be made to the injection of before and after advice to 
+  reduce remote calls.
 
 * A Rebar plugin to ease ADF compiles.
+
