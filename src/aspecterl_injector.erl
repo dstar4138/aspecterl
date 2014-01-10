@@ -1,4 +1,4 @@
-%% Aspecterl_injector.Erl - The Aspect Erl Advice Injector.
+%% The AspectErl Advice Injector.
 %%
 %% This module walks through code and injects advice if there are matching 
 %% pointcuts. This must be called after either erladf or aspecterl_extractor
@@ -8,31 +8,24 @@
 -include("defs.hrl").
 -include("advice.hrl").
 
--import( aspecterl_util, [ inform/3, check_options/2 ] ).
+-import( aspecterl_util, [ inform/3 ] ).
 
--export([parse_transform/2]).
+-export([run/2]).
 
 %% @doc Loops through the Abstract Syntax Tree and injects the advice based on
 %%   pointcuts and decoration attributes. 
 %% @end
-parse_transform( AST, Options ) ->
-    case ?AspectsOn of 
-        true -> parse( AST, Options );
-        false -> AST
-    end.
+run( AST, State ) ->
+    NewAST = update_if_missing( State, AST ),
+    injector( NewAST, State ).
 
-parse( AST, Options ) ->
-    NewAST = aspecterl_extractor:parse_transform( AST, Options ),%% XXX: CLEAN ME 
-    {_, Extracted, State} = check_options( NewAST, Options ),
-    NewerAST = update_if_missing( State, NewAST ),
-    case Extracted of
-        true  -> 
-            Module = State#aspect_pt.module,
-            inform(State, "Ignoring file in injector => ~p\n",[Module]), 
-            NewerAST;
-        false -> injector( NewerAST, State )
-    end.
 
+%%% ==========================================================================
+%%% Injection functionality
+%%% ==========================================================================
+
+%% @private
+%% @doc Loops over each function and will inject advice based on pointcuts.
 injector( AST, State ) ->
    case funloop( AST, State, [], [] ) of
        {ok, AST} -> 
@@ -45,6 +38,7 @@ injector( AST, State ) ->
        Error -> Error
     end.
 
+%% @private
 %% @doc Loop over AST pulling out functions and checking them
 funloop( [], _, Acc, E ) -> 
     AST = lists:reverse(Acc),
@@ -79,37 +73,51 @@ funloop( [{function,_Line,Name,Arity,_Clauses}=F|Rest], State, Acc, E ) ->
         [] -> % No pointcuts apply to this function.
             funloop( Rest, State, [F|Acc], E );
         Pcts ->
-            inform( State, "Found function which matches pointcuts: ~p", [{Name, Arity}]),
+            inform( State, "Found function which matches pointcuts: ~p",
+                            [{Name, Arity}]),
             {Forms, Exports} = test_pointcuts( Pcts, F , State),
             funloop( Rest, State, Forms++Acc, Exports++E )
     end;
 funloop( [H|R], State, Acc, E ) -> funloop( R, State, [H|Acc], E ).
 
-
+%% @hidden
+%% @doc Builds a passable tuple by examining the State and the found function.
 build_data( Func, Arity, #aspect_pt{module=M,behaviours=B,exported=Es} ) ->
     Scope = case lists:member( {Func,Arity}, Es ) of
                 true -> 'public'; false -> 'private'
             end,
     { B, M, Func, Arity, Scope }.
 
+%% @hidden
+%% @doc Adds arguments to the Advice object before injection when the found
+%%   function was decorated. In these instances, a decorator attribute can 
+%%   introduce new or alternate variables.
+%% @end  
 update_adv_args( Adv, Args ) -> 
     lists:foldl( fun( #advice{args=Old}=A, Acc ) ->
                         [A#advice{args=Args++Old}|Acc]
                  end, [], Adv ).
 
-%% Runs through a list of applicable poincuts and applies them to the given 
-%% function if there are advice that use the pointcuts. It will apply ALL advice
-%% which means they will compound in possibly an unanticipated order.
+%% @hidden
+%% @doc Runs through a list of applicable poincuts and applies them to the given 
+%%   function if there are advice that use the pointcuts. It will apply ALL 
+%%   advice which means they will compound in possibly an unanticipated order.
+%% @end   
 test_pointcuts( Ps, F, State ) -> 
     {NewF, Fs, Es} = 
         lists:foldl( fun( Pct, {NewF, Fs, Es}=S ) ->
-                         case aspecterl:get_advice( Pct ) of
-                            []   -> S;
-                            Advs -> wrap_advice_list( State, Advs, NewF, Fs, Es )
-                          end
+                        case aspecterl:get_advice( Pct ) of
+                           []   -> S;
+                           Advs -> wrap_advice_list( State, Advs, NewF, Fs, Es )
+                         end
                      end, {F,[],[]}, Ps),
     {[NewF|Fs],Es}.
 
+%% @hidden
+%% @doc Instigates the weaving functionality by looping over all applicable
+%%   advice to the current function. It Returns the new function, the form it's
+%%   currently taken (a list of function ASTs), and any new exports introduced.
+%% @end
 wrap_advice_list( _, [], Fun, Forms, Exports ) -> {Fun, Forms, Exports};
 wrap_advice_list( State, [A|Adv], Fun, Fs, E ) -> 
     % Assumes Original function is on top.
@@ -118,7 +126,8 @@ wrap_advice_list( State, [A|Adv], Fun, Fs, E ) ->
                                                       adv_name(A)]),
     wrap_advice_list( State, Adv, NewFun, NewForms++Fs, Es++E ).
 
-%% Weave single Advice into a single Erlang Form.
+%% @hidden
+%% @doc Weave single Advice into a single Erlang Form with ast_wrapper module.
 weave( #advice{ type=T, module=M, name=F, args=A }, Forms, State, CurAcc ) ->
     Module = State#aspect_pt.module,
     case T of
@@ -129,13 +138,20 @@ weave( #advice{ type=T, module=M, name=F, args=A }, Forms, State, CurAcc ) ->
         'around'       -> ast_wrapper:around( {M,F,A}, Forms, Module, CurAcc )
     end.
 
+%% @hidden 
+%% @doc Insert a function definition export into an AST. 
 insert_exports( AST, Exports ) ->
     lists:foldl( fun( {Func,Arity}, Forms ) -> 
                          parse_trans:export_function( Func, Arity, Forms ) 
                  end, AST, Exports).
 
+%% @hidden
+%% @doc State Accessor for function and module access.
 fun_name( #aspect_pt{module=M},
           {function, _line, Name, _Arity, _Clauses} ) -> {M, Name}.
+
+%% @hidden
+%% @doc Advice information accessor, used for comparisons.
 adv_name( #advice{ module = Module, name = Name } ) -> {Module, Name}.
 
 %%% =========================================================================

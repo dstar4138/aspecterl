@@ -1,27 +1,31 @@
-%% AST Wrapping Module. 
-%%  
+%% The AST Wrapping Module. 
+%%
+%% @doc 
 %%  This module abstracts the usage of the Erlang Abstract Syntax Tree from
 %%  the injection code. Please see the aspecterl_injector module for details.
 %%  AspectErl only provides five methods of injection:
-%%
-%%      * Before - Advice gets called before function execution, will get access
-%%          to the parameters passed in.
+%%  <ul>
+%%      <li> Before - Advice gets called before function execution, will get 
+%%           access to the parameters passed in.</li>
 %%  
-%%      * OnReturn - Advice gets called after function execution, will get 
+%%      <li> OnReturn - Advice gets called after function execution, will get 
 %%          access to parameters passed in and return value. Will not get to 
-%%          edit it.
+%%          edit it.</li>
 %%      
-%%      * OnThrow - Advice gets called if function throws an error, will get
+%%      <li> OnThrow - Advice gets called if function throws an error, will get
 %%          access to parameters passed in and error code in form 
-%%          {throw, {Er,Rz}}.
+%%          `{throw, {Er,Rz}}'.</li>
 %%      
-%%      * OnFinal - Advice gets called after function execution. If function
+%%      <li> OnFinal - Advice gets called after function execution. If function
 %%          throws an error, or error handling breaks, Advice still gets 
-%%          executed. Will get access to parameters passed in.
+%%          executed. Will get access to parameters passed in.</li>
 %%      
-%%      * Around - Advice gets called in place of function. It is up to advice
-%%          to call the provided ?proceed(...) macro to run the function. 
-%%
+%%      <li> Around - Advice gets called in place of function. It is up to 
+%%          advice to call the provided `?proceed(...)' macro to run the 
+%%          function. </li>
+%%  </ul>
+%% @end
+%% @see aspecterl_injector
 %% @author Alexander Dean
 -module(ast_wrapper).
 
@@ -243,8 +247,11 @@ final( OnFinal, {function, Line, Name, Arity, Clauses}, Module, AST ) ->
     {ok, [{NewFunc,Arity}], [NewFunction, RenamedFunc]}.
 
 %% @doc Injects a function into the AST that just throws an error when called.
+%%   This is useful when a function is automatically added via the 
+%%   'inject_missing' command AspectErl provides.
+%% @end  
 inject_error_fun( Module, Fun, Arity, AST ) ->
-    ErrorMsg = io_lib:format(?INJECT_ERROR, [Module, Fun, Arity]),
+    ErrorMsg = lists:flatten(io_lib:format(?INJECT_ERROR, [Module,Fun,Arity])),
     FakeFun = {function, ?DUMMY_LINE, Fun, Arity,
                 [{clause, ?DUMMY_LINE, argsdlist( Arity, ?DUMMY_LINE ), [],
                    [{call, ?DUMMY_LINE, {atom, ?DUMMY_LINE, error},

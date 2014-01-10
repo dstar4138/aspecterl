@@ -1,15 +1,25 @@
 %% AspectErl
-%%  This module does two things: It provides access to the internal global
+%%
+%% @doc
+%%  This module does three things: It provides access to the internal global
 %%  pointcut and advice tables stored in ETS to the parse transformers. It also
-%%  gives user and system callback functions such as compile/1.
+%%  gives user and system callback functions such as compile/1. And finally, it
+%%  masks that there are two parse_transformers, so that only this file need be
+%%  injected.
+%% @end
+%%
+%% @see aspecterl_extractor
+%% @see aspecterl_injector
 %%
 %% @author Alexander Dean
 -module(aspecterl).
+-include("defs.hrl").
 -include("advice.hrl").
 -include("pointcut.hrl").
 
 % User and System callbacks.
--export([compile/1]).
+-export([compile/1, compile/3]).
+-export([parse_transform/2]).
 
 % Internal Functionality for accessing the ETS table.
 -export([ update_global_table/2, check_pointcut/1, 
@@ -29,6 +39,21 @@
 %%% User and System Callbacks.
 %%% =========================================================================
 
+%% @doc Entry point for the AspectErl injection and extraction transformer.
+%%   Actual functionality are in other modules, but this keeps things simple.
+%% @end  
+parse_transform( AST, Options ) ->
+    case ?AspectsOn of
+        true -> option_check_parse( AST, Options );
+        false -> AST
+    end.
+
+%% @doc Compiles a source directory using the AspectErl transformer. The 
+%%   parameter passed should be a list of size 1,2, or 3. If one is provided
+%%   it assumes it's an advice directory and that ../src and ../ebin exist as
+%%   the source and output directories respectively. For a list of size 2, give
+%%   the source and advice directories. Alternatively you can provide all three.
+%% @end  
 compile( Dirs ) when is_list(Dirs) ->
     {S,A,E} = case Dirs of
         [Adv] -> % Assumes from adv dir that ../src and ../ebin exist.
@@ -43,6 +68,9 @@ compile( Dirs ) when is_list(Dirs) ->
     end,
     compile( S, A, E ).
 
+%% @doc Similar to compile/1 except you must provide all three directories and
+%%   nothing is assumed.
+%% @end  
 compile( Src, Adv, Ebin ) ->
     case verify( [Src, Adv, Ebin] ) of
         false -> ok;
@@ -55,54 +83,65 @@ compile( Src, Adv, Ebin ) ->
              end)
     end.
 
+
 %%% =========================================================================
 %%% Global Aspect Table Callbacks.
 %%% =========================================================================
 
+%% @private
+%% @doc Internal Callback for updating the global table with some new pointcuts
+%%   and advice declarations found in an advice file.
+%% @end  
 update_global_table( Pct, Adv ) ->
     {ok, _Pid} = check_ets_server(),
     send_records( Adv, Pct ).
 
-check_ets_server() ->
-    case whereis( ?MODULE ) of
-        undefined -> start();
-        Pid -> {ok, Pid}
-    end.
-
+%% @private
+%% @doc Pass the advice and pointcuts to the global table.
 send_records( Adv, Pct ) -> 
     check_ets_server(),
     gen_server:cast(?MODULE, {data, Adv, Pct}), ok.
+
+%% @private 
+%% @doc Check if there are any pointcuts that match a particular function info.
 check_pointcut( Data ) -> 
     check_ets_server(),
     gen_server:call( ?MODULE, {chk_pct, Data}).
+
+%% @private
+%% @doc Get all advice to apply for a particular pointcut.
 get_advice( PctName ) -> 
     check_ets_server(),
     gen_server:call( ?MODULE, {get_adv, PctName}).
+
+%% @private
+%% @doc Get all advice to apply for a module and function name (decorator).
 get_advice( Module, Function ) -> 
     check_ets_server(),
     gen_server:call(?MODULE, {get_adv, Module, Function}). 
+
 
 %%% =========================================================================
 %%% gen_server Callback functions
 %%% =========================================================================
 
+%% @private
+%% @doc Starts up the advice and pointcut server to monitor the ETS store.
 start() -> gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
-% Defaults. %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init([])->{ok, nil}.
-handle_info(_I, S) -> {noreply, S}.
-terminate(_R, _S) -> ok.
-code_change(_,S,_)->{ok, S}.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%% We only care about casts from the extractor.
+%% @private
+%% @doc We only care about casts from the extractor. A message per file parsed
+%%   will be sent for storage.
+%% @end  
 handle_cast( {data, Adv, Pct}, State ) ->
     insert_into_table( Adv, Pct ),
     {noreply, State};
 handle_cast( _,  S ) -> {noreply, S}.
 
-
-% We only care about a call from the injector.
+%% @private
+%% @doc We only care about a call from the injector. For each function found
+%%   we'll check for pointcuts and decorators, then grab any advice needed.
+%% @end  
 handle_call({chk_pct, Data}, _F, S) ->
     Res = internal_check_pointcut( Data ),
     {reply, Res, S};
@@ -114,17 +153,40 @@ handle_call({get_adv, M, Fun}, _F, S)->
     {reply, Res, S};
 handle_call(_R,_F,S) -> {noreply, S}.
 
+%% @hidden
+%% @doc AspectErl Library implements default functions for the init/1,
+%%   handle_info/2, terminate/2, and code_change/3 callbacks required by the
+%%   gen_server behaviour. These are ignored.
+%% @end  
+init([])->{ok, nil}.
+handle_info(_I, S) -> {noreply, S}.
+terminate(_R, _S) -> ok.
+code_change(_,S,_)->{ok, S}.
+%% --------------------------------
+
 
 %%% =========================================================================
-%%% Global Aspect Table Functions
+%%% Global Aspect Table Utility Functions
 %%% =========================================================================
 
+%% @hidden
+%% @doc Check if the global table has been started and we can access it.
+check_ets_server() ->
+    case whereis( ?MODULE ) of
+        undefined -> start();
+        Pid -> {ok, Pid}
+    end.
+
+%% @hidden
+%% @doc Insert advice and pointcuts into their respective Ets tables.
 insert_into_table( Adv, Pct ) ->
     {ok, P} = get_pct_table(),
     true = ets:insert(P, Pct),
     {ok, A} = get_adv_table(),
     true = ets:insert(A, Adv).
 
+%% @hidden
+%% @doc Table Accessors for both the pointcut and advice tables.
 get_pct_table() -> get_table(?PCT_Table).
 get_adv_table() -> get_table(?ADV_Table).
 get_table( Table ) ->
@@ -133,7 +195,8 @@ get_table( Table ) ->
         _ -> {ok, Table}
     end.
 
-%% Given all the information about a function, return if any pointcuts match.
+%% @hidden
+%% @doc Given all the information about a function, return any pointcut matchs.
 internal_check_pointcut( Data ) ->
     {ok, T} = get_pct_table(),
     ets:foldl( fun( Row , Acc ) ->
@@ -143,6 +206,11 @@ internal_check_pointcut( Data ) ->
                     end
                 end,
                [], T ).
+
+%% @hidden
+%% @doc Check pointcut matching with the data describing a particular function
+%%   instance.
+%% @end  
 check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
            {Behaviours, Module, Function, Arity, Scope} ) ->
     case
@@ -155,7 +223,7 @@ check_pct( #pointcut{ name=N, module=M, func=F, behaviour=B, arity=A, scope=S },
         true -> {ok, N};
         false -> false
     end.
-
+%% --- Value Checking Functionality ----------------------
 check_rel( nil, [] ) -> true;
 check_rel( RE, L ) when is_list(L) ->
     lists:foldl( fun ( B, Acc ) ->
@@ -181,8 +249,10 @@ check_mem( nil, _ ) -> true;
 check_mem( [], _ )  -> true;
 check_mem( L, M) when is_list(L) ->
     lists:member( M, L ).
+%% -------------------------------------------------------
 
-%% Get all advice which are triggered by the pointcut name,
+%% @hidden 
+%% @doc Get all advice which are triggered by the pointcut name.
 internal_get_advice( PctName ) ->
     {ok, T} = get_adv_table(),
     ets:foldl( fun( Row, Acc ) ->
@@ -194,8 +264,10 @@ internal_get_advice( PctName ) ->
 check_adv( #advice{pointcuts=Ps}, P ) ->
     lists:member( P, Ps ).
 
-% Get advice by Module and Function name, such as when advice happens.
-% if module is blank, pass in nil.
+%% @hidden
+%% @doc Get advice by Module and Function name, such as when advice happens.
+%%   if module is blank, pass in nil.
+%% @end  
 internal_get_advice( Module, Function ) ->
     {ok, T} = get_adv_table(),
     ets:foldl( fun( Row, Acc ) ->
@@ -206,6 +278,7 @@ internal_get_advice( Module, Function ) ->
                 end, [], T ).
 check_adv( #advice{module=M, name=N}, Mod, Func ) ->
     N =:= Func andalso (Mod == nil orelse M =:= Mod).
+
 
 %% ==========================================================================
 %% Compilation Pipeline
@@ -239,7 +312,7 @@ build( AdviceDir, SourceDir, OutDir ) ->
 compile_files( SourceDir, OutDir, Inject ) ->
    Erls = get_erl_files( SourceDir ),
    Opts = [{outdir, OutDir}] ++
-            (if Inject -> [{parse_transform, aspecterl_injector}];
+            (if Inject -> [{parse_transform, aspecterl}];
                 true   -> []
              end),
    ok = compile_each( Erls, Opts ).
@@ -267,4 +340,25 @@ do_compile( File, Options ) ->
 %% @doc Grab all files with *.erl extension within a directory.
 get_erl_files( Dir ) ->
     filelib:fold_files( Dir, "^.*\.erl$", false, fun(E,A)->[E|A] end, [] ).
+
+
+%%% ==========================================================================
+%%% Parse Transformation
+%%% ==========================================================================
+
+%% @hidden
+%% @doc Checks the options provided by the AST and compiler, then runs the 
+%%   extractor if the file is labeled as advice and injects if it's not 
+%%   excluded.
+%% @end  
+option_check_parse( AST, Options ) ->
+    {HasAdvice, Excluded, State} = aspecterl_util:check_options( AST, Options ),
+    CleanAST = case HasAdvice of
+                    false -> AST;
+                    true -> aspecterl_extractor:run( AST, State )
+                end,
+    case Excluded of
+        true  -> CleanAST;
+        false -> aspecterl_injector:run( CleanAST, State )
+    end.
 

@@ -12,31 +12,18 @@
 -include("advice.hrl").
 -include("pointcut.hrl").
 
--import( aspecterl_util, [ inform/3, check_options/2 ] ).
+-import( aspecterl_util, [ inform/3 ] ).
 
-% The Compile-time hook function. See include/aspect.hrl for more information.
--export([parse_transform/2]).
+-export([run/2]).
 
 %% @doc Loops through the Abstract Syntax Tree and extracts the portions of
 %% interest then injects advice code where it's needed.
 %% @end
-parse_transform( AST, Options ) ->
-    case ?AspectsOn of
-        true  -> parse( AST, Options );
-        false -> AST
-    end.
-
-parse( AST, Options ) ->
-    {HasAdvice, _, State} = check_options( AST, Options ), 
-    case HasAdvice of
-        true -> 
-            {NewAST, PCts} = extract_pointcuts( AST, State ),
-            {FinalAST, Adv} = extract_advice( NewAST, State ),
-            NewState = State#aspect_pt{ pct=PCts, adv=Adv },
-            update_global_table( NewState ),
-            FinalAST;
-        false -> AST
-    end.
+run( AST, State ) ->
+    {NewAST, Pcts} = extract_pointcuts( AST, State ),
+    {FinalAST, Adv} = extract_advice( NewAST, State ),
+    aspecterl:update_global_table( Pcts, Adv ),
+    FinalAST.
  
 %%% =========================================================================
 %%% Parse Passes
@@ -85,14 +72,6 @@ eadv( [H|R], State, {AST, Adv} ) -> eadv( R, State, {[H|AST], Adv} ).
 %%% =========================================================================
 %%% Internal Functionality
 %%% =========================================================================
-
-%% @hidden
-%% @doc Sends a message to a running server so as to keep track of the 
-%%   pointcuts and advice found in this file.
-%% @end
-update_global_table( #aspect_pt{ pct=Pct, adv=Adv } = State ) ->
-    aspecterl:update_global_table( Pct, Adv ),
-    inform( State, "Updated global table", [] ).
 
 %% @hidden 
 %% @doc Creates a pointcut object from an attribute found on a particular line.
