@@ -12,3 +12,6 @@ that would be nice to add:
 
 * A Rebar plugin to ease ADF compiles.
 
+* A Testing framework using eunit would be a requirement for use in production.
+  This hasn't been a priority since none of my projects utilize it.
+
